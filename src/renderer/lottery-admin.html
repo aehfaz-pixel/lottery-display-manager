@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lottery Admin Database</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f2f5;--surface:#fff;--border:#dde1e7;--text:#111827;--muted:#6b7280;
+  --primary:#2563eb;--success:#059669;--danger:#dc2626;--warn:#d97706;
+  --hdr:#0f172a;--hdr2:#1e293b;--accent:#f5c500;
+  --scan-ok-bg:#ecfdf5;--scan-ok-text:#065f46;
+  --scan-warn-bg:#fffbeb;--scan-warn-text:#92400e;
+  --scan-new-bg:#eff6ff;--scan-new-text:#1e40af;
+  --scan-err-bg:#fef2f2;--scan-err-text:#991b1b;
+  --btn-sec-bg:#f1f5f9;--btn-sec-hover:#e2e8f0;
+  --row-border:#f1f5f9;--row-hover:#f8fafc;--row-even:#f8fafc;
+  --editable-hover:#eff6ff;--editable-hover-border:#bfdbfe;--editable-focus:#fff;
+}
+html[data-theme="dark"]{
+  --bg:#f0f2f5;--surface:#fff;--border:#dde1e7;--text:#111827;--muted:#6b7280;
+  --primary:#2563eb;--success:#059669;--danger:#dc2626;--warn:#d97706;
+  --hdr:#010409;--hdr2:#161b22;--accent:#f5c500;
+  --scan-ok-bg:#ecfdf5;--scan-ok-text:#065f46;
+  --scan-warn-bg:#fffbeb;--scan-warn-text:#92400e;
+  --scan-new-bg:#eff6ff;--scan-new-text:#1e40af;
+  --scan-err-bg:#fef2f2;--scan-err-text:#991b1b;
+  --btn-sec-bg:#f1f5f9;--btn-sec-hover:#e2e8f0;
+  --row-border:#f1f5f9;--row-hover:#f8fafc;--row-even:#f8fafc;
+  --editable-hover:#eff6ff;--editable-hover-border:#bfdbfe;--editable-focus:#fff;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+
+/* HEADER */
+header{background:var(--hdr);padding:0 18px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.logo{color:var(--accent);font-weight:800;font-size:16px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.logo-icon{font-size:20px}
+.spacer{flex:1}
+.hdr-btn{padding:6px 13px;border-radius:6px;border:1px solid var(--hdr2);background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:.15s}
+.hdr-btn:hover{background:var(--hdr2);color:#e2e8f0}
+.storage-pill{font-size:11px;background:var(--hdr2);color:#94a3b8;padding:4px 10px;border-radius:20px;border:1px solid var(--hdr2)}
+
+/* SCANNER BAR */
+.scan-bar{height:40px;background:var(--scan-ok-bg);border-bottom:2px solid var(--success);display:flex;align-items:center;padding:0 18px;gap:10px;flex-shrink:0;transition:.3s}
+.scan-bar.warn{background:var(--scan-warn-bg);border-color:var(--warn)}
+.scan-bar.new{background:var(--scan-new-bg);border-color:var(--primary)}
+.scan-bar.err{background:var(--scan-err-bg);border-color:var(--danger)}
+.scan-dot{width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;flex-shrink:0}
+.scan-bar.warn .scan-dot{background:var(--warn)}
+.scan-bar.new .scan-dot{background:var(--primary);animation:none}
+.scan-bar.err .scan-dot{background:var(--danger);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.scan-label{font-size:12px;font-weight:600;color:var(--scan-ok-text)}
+.scan-bar.warn .scan-label{color:var(--scan-warn-text)}
+.scan-bar.new .scan-label{color:var(--scan-new-text)}
+.scan-bar.err .scan-label{color:var(--scan-err-text)}
+.scan-last{margin-left:auto;font-family:monospace;font-size:12px;color:var(--muted)}
+
+/* TOOLBAR */
+.toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 18px;height:48px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.btn{padding:7px 14px;border-radius:7px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-sec{background:var(--btn-sec-bg);color:var(--text);border:1px solid var(--border)}.btn-sec:hover{background:var(--btn-sec-hover)}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#b91c1c}
+.btn-sm{padding:5px 10px;font-size:11px}
+.search-box{padding:7px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:200px;outline:none}
+.search-box:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+/* TABLE */
+.tbl-wrap{flex:1;overflow:auto;padding:14px 18px}
+table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+thead tr{background:#f8fafc;border-bottom:2px solid var(--border)}
+th[data-col]{cursor:pointer;white-space:nowrap;user-select:none;position:relative}
+th[data-col]:hover{background:#e8edf2}
+th[data-col] .th-inner{display:inline-flex;align-items:center;gap:4px}
+th[data-col] .th-sort{font-size:10px;color:var(--muted);opacity:.5}
+th[data-col] .th-sort.active{color:var(--accent);opacity:1}
+th[data-col] .th-filter-btn{opacity:0;font-size:10px;color:var(--muted);cursor:pointer;padding:0 2px;border-radius:2px;line-height:1;transition:.1s}
+th[data-col]:hover .th-filter-btn{opacity:1}
+th[data-col] .th-filter-btn.has-filter{opacity:1;color:var(--accent)}
+.inv-filter-popup{position:fixed;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);min-width:180px}
+.inv-filter-popup input{width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text);outline:none}
+.inv-filter-popup input:focus{border-color:var(--accent)}
+.inv-filter-popup .fp-btns{display:flex;gap:6px;margin-top:8px}
+.inv-filter-popup .fp-btns button{flex:1;padding:4px 0;font-size:11px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-weight:600}
+.fp-apply{background:var(--accent);color:#000;border-color:var(--accent)!important}
+.fp-clear{background:var(--surface3);color:var(--muted)}
+th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.th-custom{display:flex;align-items:center;gap:5px}
+.rm-col{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:14px;padding:1px 3px;border-radius:3px;line-height:1}
+.rm-col:hover{color:var(--danger);background:#fee2e2}
+tbody tr{border-bottom:1px solid var(--row-border);transition:background .1s}
+tbody tr:hover{background:var(--row-hover)}
+tbody tr.hl td{animation:hlFade 3s forwards}
+@keyframes hlFade{0%{background:#fef08a}70%{background:#fef08a}100%{background:transparent}}
+td{padding:9px 12px;vertical-align:middle}
+.img-cell{width:72px;cursor:pointer}
+.img-cell img{width:58px;height:42px;object-fit:cover;border-radius:5px;border:1px solid var(--border);display:block}
+.img-cell:hover img,.img-cell:hover .no-img{border-color:var(--primary)}
+.no-img{width:58px;height:42px;border-radius:5px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:18px;color:#d1d5db}
+.editable{cursor:text;padding:4px 6px;border-radius:4px;min-width:60px;display:inline-block;border:1px solid transparent;transition:.1s}
+.editable:hover{background:var(--editable-hover);border-color:var(--editable-hover-border)}
+.editable:focus{outline:none;background:var(--editable-focus);border-color:var(--primary);box-shadow:0 0 0 2px rgba(37,99,235,.12)}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.b-id{background:#e0f2fe;color:#075985;font-family:monospace}
+.b-price{background:#d1fae5;color:#065f46}
+.row-acts{display:flex;gap:4px}
+.ico-btn{background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:14px;color:var(--muted)}
+.ico-btn:hover{background:#f1f5f9}
+.ico-btn.del:hover{background:#fee2e2;color:var(--danger)}
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-icon{font-size:48px;margin-bottom:14px}
+.empty h3{font-size:17px;color:var(--text);margin-bottom:6px}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px)}
+.modal{background:#fff;border-radius:14px;padding:26px;width:520px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+.modal h2{font-size:17px;font-weight:800;margin-bottom:20px}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.fg input,.fg select,.fg textarea{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none}
+.fg input:focus,.fg select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.up-area{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;transition:.2s}
+.up-area:hover{border-color:var(--primary);background:#eff6ff}
+.up-area p{font-size:12px;color:var(--muted);margin-top:4px}
+.img-prev{width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-top:10px;border:1px solid var(--border)}
+.or-div{text-align:center;color:var(--muted);font-size:11px;margin:10px 0;position:relative}
+.or-div::before,.or-div::after{content:'';position:absolute;top:50%;width:44%;height:1px;background:var(--border)}
+.or-div::before{left:0}.or-div::after{right:0}
+.btn-row{display:flex;gap:10px;margin-top:22px;justify-content:flex-end}
+
+/* TLC DETAILS MODAL */
+.tlc-modal{width:580px}
+.tlc-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px}
+.tlc-title{font-size:18px;font-weight:800;color:var(--text);line-height:1.2}
+.tlc-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.tlc-badge{padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600}
+.tlc-badge.price{background:#d1fae5;color:#065f46}
+.tlc-badge.date{background:#e0f2fe;color:#075985}
+.tlc-badge.closing{background:#fef3c7;color:#92400e}
+.tlc-badge.id{background:#ede9fe;color:#4c1d95;font-family:monospace}
+.tlc-section{margin-bottom:16px}
+.tlc-section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.tlc-prize-table{width:100%;border-collapse:collapse;font-size:12px}
+.tlc-prize-table th{text-align:left;padding:6px 10px;background:var(--row-even);border-bottom:2px solid var(--border);font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+.tlc-prize-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9}
+.tlc-prize-table tr:last-child td{border-bottom:none}
+.tlc-prize-table tr:hover td{background:var(--row-hover)}
+.tlc-claimed-bar{height:6px;background:#e5e7eb;border-radius:3px;margin-top:3px;overflow:hidden}
+.tlc-claimed-fill{height:100%;background:var(--primary);border-radius:3px;transition:.3s}
+.tlc-claimed-fill.warn{background:var(--warn)}
+.tlc-claimed-fill.danger{background:var(--danger)}
+.tlc-as-of{font-size:11px;color:var(--muted);margin-top:4px}
+.tlc-error{text-align:center;padding:30px;color:var(--muted)}
+.tlc-error-icon{font-size:36px;margin-bottom:10px}
+.tlc-loading{text-align:center;padding:40px;color:var(--muted)}
+.tlc-spinner{width:28px;height:28px;border:3px solid #e5e7eb;border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tlc-not-found{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e;margin-top:8px}
+.tlc-fetch-time{font-size:10px;color:var(--muted);margin-top:12px;text-align:right}
+
+/* TABS */
+.tab-bar{background:var(--surface);border-bottom:2px solid var(--border);padding:0 18px;display:flex;gap:0;flex-shrink:0}
+.tab-btn{padding:10px 18px;font-size:12px;font-weight:700;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.15s;letter-spacing:.3px}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-btn:hover:not(.active){color:var(--text)}
+.tab-content{display:none;flex:1;overflow:hidden;flex-direction:column}
+.tab-content.active{display:flex}
+
+/* INVENTORY */
+.inv-toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 18px;height:48px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.inv-sub-tabs{background:#f8fafc;border-bottom:1px solid var(--border);padding:0 18px;display:flex;gap:0;flex-shrink:0}
+.inv-sub-btn{padding:8px 16px;font-size:11px;font-weight:700;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s;text-transform:uppercase;letter-spacing:.5px}
+.inv-sub-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+.inv-sub-content{display:none;flex:1;overflow:auto;padding:14px 18px}
+.inv-sub-content.active{display:block}
+.inv-tbl{width:100%;border-collapse:collapse;background:var(--surface);border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.inv-tbl th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;background:#f8fafc;border-bottom:2px solid var(--border)}
+.inv-tbl td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;vertical-align:middle}
+.inv-tbl tr:last-child td{border-bottom:none}
+.inv-tbl tr:hover td{background:#f8fafc}
+.inv-date-group{font-size:12px;font-weight:800;color:var(--text);padding:10px 0 6px;border-bottom:2px solid var(--border);margin-bottom:8px;margin-top:16px}
+.inv-date-group:first-child{margin-top:0}
+.inv-date-row{display:flex;justify-content:space-between;padding:7px 10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);margin-bottom:4px;font-size:12px}
+
+/* BULK SCAN MODAL */
+.scan-queue{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#f8fafc}
+.scan-queue-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.scan-queue-item:last-child{border-bottom:none}
+.scan-queue-item.dup{opacity:.5;text-decoration:line-through}
+.sq-img{width:36px;height:26px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0}
+.sq-no-img{width:36px;height:26px;border-radius:4px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.sq-info{flex:1;min-width:0}
+.sq-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sq-meta{color:var(--muted);font-size:11px}
+.sq-status{font-size:11px;font-weight:600;flex-shrink:0}
+.sq-status.ok{color:var(--success)}
+.sq-status.dup{color:var(--muted)}
+.sq-status.unknown{color:var(--warn)}
+
+/* TOAST */
+.toasts{position:fixed;top:60px;right:18px;display:flex;flex-direction:column;gap:7px;z-index:9999;pointer-events:none}
+.toast{padding:11px 16px;border-radius:9px;font-size:12px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);animation:tIn .25s ease;max-width:280px}
+.toast.ok{background:#ecfdf5;color:#065f46;border:1px solid #10b981}
+.toast.err{background:#fef2f2;color:#991b1b;border:1px solid #dc2626}
+.toast.info{background:#eff6ff;color:#1e40af;border:1px solid #3b82f6}
+@keyframes tIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-icon">🎫</span>Lottery Admin Database</div>
+  <div class="spacer"></div>
+  <span class="storage-pill" id="storagePill">Storage: 0 KB</span>
+  <button class="hdr-btn" onclick="exportDB()">⬇ Export</button>
+  <button class="hdr-btn" onclick="document.getElementById('impFile').click()">⬆ Import</button>
+  <input type="file" id="impFile" accept=".json" hidden onchange="importDB(event)">
+</header>
+
+<div class="scan-bar" id="scanBar">
+  <div class="scan-dot" id="scanDot"></div>
+  <span class="scan-label" id="scanLabel">Scanner ready — scan a pack barcode to add or find a lottery</span>
+  <span class="scan-last" id="scanLast"></span>
+</div>
+<div id="scanFetchError" style="display:none;align-items:center;gap:10px;padding:7px 18px;background:#fef2f2;border-bottom:1px solid #fca5a5;font-size:12px;color:#991b1b">
+  <span id="scanFetchErrorMsg"></span>
+  <button onclick="openAddFromError()" style="margin-left:auto;background:#dc2626;border:none;border-radius:5px;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;white-space:nowrap">+ Add Manually</button>
+  <button onclick="hideFetchError()" style="background:none;border:none;color:#991b1b;font-size:14px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-db" onclick="switchTab('db')">🎫 Lottery Types</button>
+  <button class="tab-btn" id="tab-inv" onclick="switchTab('inv')">📦 Inventory</button>
+</div>
+
+<div class="tab-content active" id="tabContent-db">
+<div class="toolbar">
+  <button class="btn btn-primary" onclick="openAdd()">+ Add Lottery</button>
+  <button class="btn btn-sec" onclick="openColModal()">+ Add Column</button>
+  <button class="btn btn-sec" onclick="syncAllTlc()" title="Sync all lotteries with TLC data">🔄 Sync All TLC</button>
+  <button class="btn btn-sec" onclick="compressAllImages()" title="Re-compress all stored images to save storage space">🗜 Compress Images</button>
+  <div class="spacer"></div>
+  <input type="text" class="search-box" id="srch" placeholder="🔍 Search name, barcode, ID..." oninput="renderTable()">
+</div>
+
+<div class="tbl-wrap">
+  <div id="emptyState" class="empty" style="display:none">
+    <div class="empty-icon">📋</div>
+    <h3>No lotteries yet</h3>
+    <p>Click "Add Lottery" or scan a pack barcode to get started.</p>
+  </div>
+  <table id="tbl" style="display:none">
+    <thead><tr id="tHead"></tr></thead>
+    <tbody id="tBody"></tbody>
+  </table>
+</div>
+</div><!-- end tabContent-db -->
+
+<!-- INVENTORY TAB -->
+<div class="tab-content" id="tabContent-inv">
+  <div class="inv-toolbar">
+    <button class="btn btn-primary" onclick="openBulkScanModal()">+ Add Inventory</button>
+    <button class="btn btn-sec" onclick="document.getElementById('tlcReportFile').click()" title="Import packs from a TLC Instant Ticket Confirmation Report (.xlsx)">📥 Import TLC Report</button>
+    <input type="file" id="tlcReportFile" accept=".xlsx" hidden onchange="importTlcReport(event)">
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <label style="color:var(--muted);font-weight:600">From</label>
+      <input type="date" id="invDateFrom" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)" oninput="invCurrentPage=0;renderInventory()">
+      <label style="color:var(--muted);font-weight:600">To</label>
+      <input type="date" id="invDateTo" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)" oninput="invCurrentPage=0;renderInventory()">
+      <button class="btn btn-sec btn-sm" onclick="clearInvDates()">Clear</button>
+    </div>
+    <div class="spacer"></div>
+    <input type="text" class="search-box" id="invSrch" placeholder="🔍 Search name, barcode..." oninput="invCurrentPage=0;renderInventory()" style="width:200px">
+    <button class="btn btn-sec btn-sm" onclick="renderInventory()" title="Refresh from manager">🔄 Refresh</button>
+    <button class="btn btn-danger btn-sm" id="invDeleteSelBtn" style="display:none" onclick="deleteSelectedInv()">🗑 Delete Selected (<span id="invSelCount">0</span>)</button>
+    <button class="btn btn-sec btn-sm" onclick="archiveOldInv()" title="Remove inventory records older than 6 months">🗄 Archive Old</button>
+
+  </div>
+  <!-- Pagination bar -->
+  <div id="invPagBar" style="display:none;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--muted)">
+    <button class="btn btn-sec btn-sm" id="invPrevBtn" onclick="invChangePage(-1)">← Prev</button>
+    <span id="invPageInfo"></span>
+    <button class="btn btn-sec btn-sm" id="invNextBtn" onclick="invChangePage(1)">Next →</button>
+    <span style="margin-left:8px;color:var(--dim)" id="invTotalInfo"></span>
+  </div>
+  <div class="inv-sub-tabs">
+    <button class="inv-sub-btn active" id="invSub-all" onclick="switchInvSub('all')">All Records</button>
+    <button class="inv-sub-btn" id="invSub-date" onclick="switchInvSub('date')">By Date</button>
+  </div>
+  <div class="inv-sub-content active" id="invSubContent-all">
+    <table class="inv-tbl" id="invTbl">
+      <thead><tr id="invTHeadRow">
+        <th><input type="checkbox" id="invSelectAll" onclick="invToggleAll(this.checked)" style="cursor:pointer"></th>
+        <th></th>
+        <th data-col="name">Lottery Name</th>
+        <th data-col="packBarcode">Pack Barcode</th>
+        <th data-col="lotteryId">Lottery ID</th>
+        <th data-col="price">Price</th>
+        <th data-col="totalTickets">Total Tickets</th>
+        <th data-col="loadedAt">Loaded</th>
+        <th data-col="activatedAt">Activated</th>
+        <th data-col="currentTicket">Current Ticket</th>
+        <th data-col="settledAt">Settled</th>
+        <th data-col="finishedAt">Sold Out</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="invTBody"></tbody>
+    </table>
+  </div>
+  <div class="inv-sub-content" id="invSubContent-date">
+    <div id="invDateView"></div>
+  </div>
+</div><!-- end tabContent-inv -->
+
+<!-- ADD/EDIT MODAL -->
+<div class="overlay" id="lotModal" style="display:none" onclick="if(event.target===this)closeLotModal()">
+<div class="modal">
+  <h2 id="mTitle">Add Lottery</h2>
+  <input type="hidden" id="eId">
+  <div id="dupeWarn" style="display:none;background:#2d1a00;border:1.5px solid #d97706;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:#fbbf24;line-height:1.5">
+    <strong style="display:block;margin-bottom:3px">⚠ Duplicate Lottery ID Detected</strong>
+    <span id="dupeMsg"></span><br>
+    <span style="color:#94a3b8;font-size:11px">You can still save — this creates a separate entry with the same ID.</span>
+  </div>
+  <div class="fg">
+    <label>Pack Barcode (12 digits)</label>
+    <input type="text" id="fBarcode" placeholder="Scan or type pack barcode first..." oninput="autoId()" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('fName').focus()}">
+  </div>
+  <div class="row2">
+    <div class="fg">
+      <label>Lottery ID (auto-extracted)</label>
+      <input type="text" id="fLotId" placeholder="Auto" readonly style="background:#f8fafc;color:var(--muted)">
+    </div>
+    <div class="fg">
+      <label>Price</label>
+      <input type="text" id="fPrice" placeholder="e.g. $5">
+    </div>
+  </div>
+  <div class="fg">
+    <label>Lottery Name</label>
+    <input type="text" id="fName" placeholder="e.g. Sizzling Hot $500,000">
+  </div>
+  <div class="fg">
+    <label>Image — Upload File</label>
+    <div class="up-area" onclick="document.getElementById('imgFile').click()">
+      📸 Click to upload image
+      <p>Auto-resized for efficient storage</p>
+      <input type="file" id="imgFile" accept="image/*" hidden onchange="onImgFile(event)">
+    </div>
+    <div class="or-div">or paste URL</div>
+    <input type="url" id="fImgUrl" placeholder="https://example.com/ticket.jpg" oninput="prevUrl()" onpaste="setTimeout(prevUrl,80)">
+    <img id="imgPrev" class="img-prev" style="display:none" onerror="this.style.display='none'">
+  </div>
+  <div id="custFields"></div>
+  <div class="btn-row">
+    <button class="btn btn-sec" onclick="closeLotModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveLottery()">Save</button>
+  </div>
+</div>
+</div>
+
+<!-- ADD COLUMN MODAL -->
+<div class="overlay" id="colModal" style="display:none" onclick="if(event.target===this)document.getElementById('colModal').style.display='none'">
+<div class="modal" style="width:360px">
+  <h2>Add Custom Column</h2>
+  <div class="fg">
+    <label>Column Label</label>
+    <input type="text" id="colName" placeholder="e.g. Top Prize, Odds, Game #">
+  </div>
+  <div class="fg">
+    <label>Type</label>
+    <select id="colType"><option value="text">Text</option><option value="number">Number</option></select>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-sec" onclick="document.getElementById('colModal').style.display='none'">Cancel</button>
+    <button class="btn btn-primary" onclick="addCol()">Add Column</button>
+  </div>
+</div>
+</div>
+
+<!-- IMAGE EDIT MODAL -->
+<div class="overlay" id="imgModal" style="display:none" onclick="if(event.target===this)document.getElementById('imgModal').style.display='none'">
+<div class="modal" style="width:440px">
+  <h2>Update Image</h2>
+  <input type="hidden" id="imgEditId">
+  <div class="fg">
+    <label>Upload New Image</label>
+    <div class="up-area" onclick="document.getElementById('imgEditFile').click()">
+      📸 Click to upload
+      <input type="file" id="imgEditFile" accept="image/*" hidden onchange="onEditImgFile(event)">
+    </div>
+    <div class="or-div">or paste URL</div>
+    <input type="url" id="editImgUrl" placeholder="https://..." oninput="prevEditUrl()" onpaste="setTimeout(prevEditUrl,80)">
+    <img id="editImgPrev" class="img-prev" style="display:none" onerror="this.style.display='none'">
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-sec" onclick="document.getElementById('imgModal').style.display='none'">Cancel</button>
+    <button class="btn btn-primary" onclick="saveImg()">Save Image</button>
+  </div>
+</div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="overlay" id="delModal" style="display:none">
+<div class="modal" style="width:340px;text-align:center">
+  <div style="font-size:40px;margin-bottom:14px">🗑️</div>
+  <h2 style="margin-bottom:8px">Delete Lottery?</h2>
+  <p style="color:var(--muted);margin-bottom:20px">This will permanently remove <strong id="delName"></strong> from the database.</p>
+  <input type="hidden" id="delId">
+  <div class="btn-row" style="justify-content:center">
+    <button class="btn btn-sec" onclick="document.getElementById('delModal').style.display='none'">Cancel</button>
+    <button class="btn btn-danger" onclick="confirmDel()">Delete</button>
+  </div>
+</div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- BULK SCAN MODAL -->
+<div class="overlay" id="bulkScanModal" style="display:none" onclick="if(event.target===this)closeBulkScanModal()">
+  <div class="modal" style="width:560px">
+    <h2>📦 Add Inventory</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Scan each pack's 14-digit unique barcode. Duplicates are ignored automatically.</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="bulkScanInput" placeholder="Scan or type 14-digit barcode..." maxlength="14"
+        style="flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--text);outline:none"
+        oninput="bulkScanValidate()"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();bulkScanAdd()}">
+      <button class="btn btn-primary" onclick="bulkScanAdd()">Add</button>
+    </div>
+    <div id="bulkScanResult" style="font-size:12px;min-height:18px;margin-bottom:8px"></div>
+    <div class="scan-queue" id="bulkScanQueue" style="display:none"></div>
+    <div id="bulkScanCount" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-sec" onclick="closeBulkScanModal()">Cancel</button>
+      <button class="btn btn-primary" id="bulkScanLoadBtn" onclick="bulkScanLoad()" style="display:none">⬇ Load All</button>
+    </div>
+  </div>
+</div>
+
+<!-- TLC REPORT IMPORT MODAL -->
+<div class="overlay" id="tlcReportModal" style="display:none" onclick="if(event.target===this)closeTlcReportModal()">
+  <div class="modal" style="width:620px;max-height:90vh;overflow-y:auto">
+    <h2>📥 Import TLC Confirmation Report</h2>
+    <!-- Processing -->
+    <div id="tlcRptProcessing" style="display:none;text-align:center;padding:30px">
+      <div class="tlc-spinner" style="margin:0 auto 12px"></div>
+      <div id="tlcRptProgressMsg" style="font-size:13px;color:var(--muted)">Reading file...</div>
+    </div>
+    <!-- Results -->
+    <div id="tlcRptResults" style="display:none">
+      <div id="tlcRptSummary" style="margin-bottom:12px"></div>
+      <div id="tlcRptList" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:4px"></div>
+      <div id="tlcRptFootnote" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-sec" onclick="closeTlcReportModal()">Cancel</button>
+        <button class="btn btn-primary" id="tlcRptLoadBtn" onclick="tlcRptLoad()">⬇ Add to Inventory</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TLC Details Modal -->
+<div class="overlay" id="tlcModal" style="display:none" onclick="if(event.target===this)closeTlcModal()">
+  <div class="modal tlc-modal">
+    <div id="tlcModalBody"></div>
+    <div class="btn-row">
+      <button class="btn btn-sec btn-sm" id="tlcRefreshBtn" onclick="tlcRefresh()" style="display:none">🔄 Refresh</button>
+      <button class="btn btn-sec" onclick="closeTlcModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STORAGE ──────────────────────────────────────────────
+const DB_KEY = 'lotteryApp_db';
+
+function loadDB(){
+  try{const r=localStorage.getItem(DB_KEY);return r?JSON.parse(r):{version:1,customCols:[],lotteries:[]}}
+  catch(e){return{version:1,customCols:[],lotteries:[]}}
+}
+function saveDB(){
+  localStorage.setItem(DB_KEY,JSON.stringify(db));
+  localStorage.setItem('lotteryApp_updated',Date.now()+'');
+  updateStorage();
+  try{ _dbSync && _dbSync.postMessage('db-changed'); }catch(e){}
+}
+let db = loadDB();
+
+// ── CROSS-FRAME DB SYNC ───────────────────────────────────
+// In the shell, Lottery Types and Inventory are separate iframes, each with
+// its own in-memory `db`. When one saves, the others must reload + re-render.
+let _dbSync=null;
+try{
+  _dbSync=new BroadcastChannel('lotteryApp_db_sync');
+  _dbSync.onmessage=(ev)=>{
+    if(ev.data==='db-changed'){
+      db=loadDB();
+      // Re-render whichever view is active in this frame
+      try{ renderTable(); }catch(e){}
+      try{ if(document.getElementById('tabContent-inv')?.classList.contains('active')) renderInventory(); }catch(e){}
+      try{ updateStorage(); }catch(e){}
+    }
+  };
+}catch(e){}
+
+// ── INDEXEDDB IMAGE STORE ─────────────────────────────────
+const IMG_DB_NAME='lotteryImages',IMG_STORE='images',IMG_DB_VER=1;
+const imgCache={};  // id → resolved dataUrl, warmed at startup
+let _idbReady=null;
+function openImgDB(){
+  if(_idbReady) return _idbReady;
+  _idbReady=new Promise((res,rej)=>{
+    const req=indexedDB.open(IMG_DB_NAME,IMG_DB_VER);
+    req.onupgradeneeded=e=>e.target.result.createObjectStore(IMG_STORE);
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e.target.error);
+  });
+  return _idbReady;
+}
+async function idbPut(id,dataUrl){
+  const idb=await openImgDB();
+  return new Promise((res,rej)=>{
+    const tx=idb.transaction(IMG_STORE,'readwrite');
+    tx.objectStore(IMG_STORE).put(dataUrl,id);
+    tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);
+  });
+}
+async function idbDel(id){
+  const idb=await openImgDB();
+  return new Promise((res,rej)=>{
+    const tx=idb.transaction(IMG_STORE,'readwrite');
+    tx.objectStore(IMG_STORE).delete(id);
+    tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);
+  });
+}
+async function idbGetAll(){
+  const idb=await openImgDB();
+  return new Promise((res,rej)=>{
+    const result={};
+    const cur=idb.transaction(IMG_STORE,'readonly').objectStore(IMG_STORE).openCursor();
+    cur.onsuccess=e=>{const c=e.target.result;if(c){result[c.key]=c.value;c.continue();}else res(result);};
+    cur.onerror=e=>rej(e.target.error);
+  });
+}
+// 'idb:ID' → resolved dataUrl from cache; anything else passthrough
+function resolveImg(img){
+  if(!img) return null;
+  if(typeof img==='string'&&img.startsWith('idb:')) return imgCache[img.slice(4)]||null;
+  return img;
+}
+async function warmImgCache(){
+  try{const all=await idbGetAll();Object.assign(imgCache,all);}
+  catch(e){console.warn('IDB warm failed',e);}
+}
+// Write dataUrl to IDB, cache it, set stub on lot
+async function storeImg(lot,dataUrl){
+  imgCache[lot.id]=dataUrl;
+  await idbPut(lot.id,dataUrl);
+  lot.image='idb:'+lot.id;
+}
+// One-time migration: move existing data: images from localStorage → IDB
+async function migrateImagesToIdb(){
+  let migrated=0;
+  for(const l of db.lotteries){
+    if(l.image&&l.image.startsWith('data:')){
+      await idbPut(l.id,l.image);
+      imgCache[l.id]=l.image;
+      l.image='idb:'+l.id;
+      migrated++;
+    }
+  }
+  if(migrated>0){saveDB();console.log(`Migrated ${migrated} images to IDB`);}
+}
+
+function updateStorage(){
+  const keys={
+    'lotteryApp_db':'DB',
+    'lotteryApp_slots':'Slots',
+    'lotteryApp_inventory':'Inventory',
+    'lotteryApp_sales_log':'Sales Log',
+    'lotteryApp_ad_cfg':'Ad Config',
+    'lotteryApp_promo':'Promo',
+    'lotteryApp_prize_cache':'Prize Cache',
+    'lotteryApp_display_cfg':'Display Cfg',
+  };
+  let total=0;
+  const parts=[];
+  for(const k in localStorage){
+    if(k.startsWith('lotteryApp')){
+      const kb=Math.round((localStorage[k]||'').length/1024);
+      total+=kb;
+      const label=keys[k]||k.replace('lotteryApp_','');
+      if(kb>0) parts.push(`${label}: ${kb} KB`);
+    }
+  }
+  const el=document.getElementById('storagePill');
+  // localStorage limit is ~5MB (5120 KB) per origin
+  const limit=5120;
+  const pct=Math.round(total/limit*100);
+  el.textContent=`Storage: ${total} KB / 5120 KB (${pct}%)`;
+  el.title=parts.join(' · ')||'No data';
+  el.style.color=total>4500?'#ef4444':total>3000?'#f59e0b':'';
+  if(total>4000&&!el._warned){
+    el._warned=true;
+    toast('⚠ Storage over 4 MB — click "Compress Images" to free space','err');
+  }
+}
+
+// ── BARCODE SCANNER ───────────────────────────────────────
+let buf='', lastKey=0, bufTimer=null;
+document.addEventListener('keydown', e=>{
+  const tag=document.activeElement.tagName.toLowerCase();
+  if(['input','textarea','select'].includes(tag)&&document.activeElement.id!=='__none__') return;
+  if(e.key==='Enter'){
+    if(buf.length>=6) handleBarcode(buf.replace(/\s/g,''));
+    buf=''; clearTimeout(bufTimer); return;
+  }
+  if(e.key.length===1){
+    const now=Date.now();
+    if(now-lastKey>500&&buf.length>0)buf='';
+    buf+=e.key; lastKey=now;
+    clearTimeout(bufTimer);
+    bufTimer=setTimeout(()=>{buf='';},200);
+  }
+});
+
+let _lastFailedCode='';
+function showFetchError(msg,code){
+  _lastFailedCode=code||'';
+  document.getElementById('scanFetchErrorMsg').textContent=msg;
+  document.getElementById('scanFetchError').style.display='flex';
+}
+function hideFetchError(){
+  document.getElementById('scanFetchError').style.display='none';
+  _lastFailedCode='';
+}
+function openAddFromError(){hideFetchError();openAdd(_lastFailedCode||undefined);}
+
+function handleBarcode(code){
+  document.getElementById('scanLast').textContent=code;
+  hideFetchError();
+  if(isPackBC(code)){
+    const lid=extractLid(code);
+    const found=db.lotteries.find(l=>l.lotteryId===lid);
+    if(found){
+      hlRow(found.id);
+      setScan('ok',`✓ Found: ${found.name||'Lottery '+lid} — syncing with TLC...`);
+      syncLotteryTlc(found.id, lid).then(updated => {
+        if(updated) setScan('ok',`✓ Synced: ${found.name||lid}`);
+        else setScan('ok',`✓ Found: ${found.name||'Lottery '+lid} — highlighted below`);
+      });
+      toast(`Found: ${found.name||lid}`,'ok');
+    } else {
+      setScan('new',`Looking up ID ${lid} on TLC...`);
+      fetch(`/api/tlc/scratch/${lid}`)
+        .then(r=>r.json())
+        .then(d=>{
+          if(d.ok&&d.name){
+            const newLot={id:genId(),packBarcode:null,lotteryId:lid,name:d.name,price:d.price||'',custom:{},createdAt:Date.now()};
+            if(d.packSize){const tk='c_total_tickets_1780013226667';newLot.custom[tk]=d.packSize;}
+            fetch(`/api/tlc/image?url=${encodeURIComponent('https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/'+lid+'_img1.gif')}`)
+              .then(ir=>ir.json()).then(ib=>{if(ib.dataUrl)storeImg(newLot,ib.dataUrl);}).catch(()=>{});
+            db.lotteries.push(newLot);saveDB();renderTable();hlRow(newLot.id);
+            setScan('ok',`✓ Auto-added: ${d.name}`);
+            toast(`Added: ${d.name}`,'ok');
+          } else {
+            setScan('err',`ID ${lid} not found on TLC`);
+            showFetchError(`Lottery ID ${lid} not found on TLC — game may not exist or may be closed.`,code);
+          }
+        })
+        .catch(e=>{
+          setScan('err',`TLC fetch failed for ID ${lid}`);
+          const reason=e.message?.toLowerCase().includes('network')||e.message?.toLowerCase().includes('fetch')?'Network error — check internet connection':e.message||'Unknown error';
+          showFetchError(`Fetch failed for ID ${lid}: ${reason}`,code);
+        });
+      return;
+    }
+  } else if(isUniqueBC(code)){
+    setScan('warn','Pack unique barcode — use this in Lottery Manager');
+    toast('This is a pack unique barcode — open Lottery Manager to use it','info');
+  } else {
+    setScan('err',`Unrecognised barcode: ${code}`);
+    toast('Unrecognised barcode format','err');
+  }
+  setTimeout(()=>setScan('ready'),5000);
+}
+
+function isPackBC(b){return/^\d{12}$/.test(b)}
+function isUniqueBC(b){return/^\d{14}$/.test(b)}
+function extractLid(b){return b.slice(-5,-1)}
+function setScan(state,msg){
+  const bar=document.getElementById('scanBar'),lbl=document.getElementById('scanLabel');
+  bar.className='scan-bar'+(state!=='ready'?' '+state:'');
+  lbl.textContent=msg||'Scanner ready — scan a pack barcode to add or find a lottery';
+}
+
+// ── TABLE ─────────────────────────────────────────────────
+function renderTable(){
+  const q=document.getElementById('srch').value.toLowerCase();
+  const head=document.getElementById('tHead'),body=document.getElementById('tBody');
+  const cols=[
+    {k:'image',l:'Image',w:'72px'},
+    {k:'packBarcode',l:'Pack Barcode',w:'140px'},
+    {k:'lotteryId',l:'Lottery ID',w:'90px'},
+    {k:'name',l:'Name',w:'auto'},
+    {k:'price',l:'Price',w:'80px'},
+    ...db.customCols.map(c=>({k:c.key,l:c.label,w:'120px',cust:true,cid:c.id})),
+    {k:'__actions',l:'',w:'80px'}
+  ];
+  head.innerHTML='';
+  cols.forEach(h=>{
+    const th=document.createElement('th');th.style.width=h.w;
+    if(h.cust)th.innerHTML=`<div class="th-custom">${escH(h.l)}<button class="rm-col" onclick="rmCol('${h.cid}')" title="Remove column">×</button></div>`;
+    else th.textContent=h.l;
+    head.appendChild(th);
+  });
+  let rows=db.lotteries.filter(l=>{
+    if(!q)return true;
+    return(l.name||'').toLowerCase().includes(q)||(l.packBarcode||'').includes(q)||(l.lotteryId||'').includes(q)||(l.price||'').toLowerCase().includes(q);
+  });
+  const empty=document.getElementById('emptyState'),tbl=document.getElementById('tbl');
+  if(rows.length===0){empty.style.display='block';tbl.style.display='none';return}
+  empty.style.display='none';tbl.style.display='table';
+  body.innerHTML='';
+  rows.forEach(lot=>{
+    const tr=document.createElement('tr');tr.id='r_'+lot.id;
+    // image
+    const itd=document.createElement('td');itd.className='img-cell';itd.title='Click to change image';
+    itd.onclick=()=>openImgModal(lot.id);
+    itd.innerHTML=(resolveImg(lot.image))?`<img src="${resolveImg(lot.image)}" alt="">`:`<div class="no-img">🎫</div>`;
+    tr.appendChild(itd);
+    // pack barcode
+    const bctd=document.createElement('td');bctd.style.fontFamily='monospace';bctd.style.fontSize='12px';bctd.textContent=lot.packBarcode||'';tr.appendChild(bctd);
+    // lottery id
+    const lidtd=document.createElement('td');lidtd.innerHTML=`<span class="badge b-id">${escH(lot.lotteryId||'')}</span>`;tr.appendChild(lidtd);
+    // name (editable)
+    const ntd=document.createElement('td');
+    ntd.innerHTML=`<span class="editable" contenteditable="true" data-id="${lot.id}" data-k="name" onblur="updField(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${escH(lot.name||'')}</span>`;
+    tr.appendChild(ntd);
+    // price (editable)
+    const ptd=document.createElement('td');
+    ptd.innerHTML=`<span class="badge b-price editable" contenteditable="true" data-id="${lot.id}" data-k="price" onblur="updField(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${escH(lot.price||'')}</span>`;
+    tr.appendChild(ptd);
+    // custom cols
+    db.customCols.forEach(col=>{
+      const ctd=document.createElement('td');
+      const v=(lot.custom&&lot.custom[col.key])||'';
+      ctd.innerHTML=`<span class="editable" contenteditable="true" data-id="${lot.id}" data-ck="${col.key}" onblur="updCustom(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${escH(v)}</span>`;
+      tr.appendChild(ctd);
+    });
+    // actions
+    const atd=document.createElement('td');
+    atd.innerHTML=`<div class="row-acts"><button class="ico-btn" onclick="openTlcDetails('${lot.id}')" title="TLC Details">🔍</button><button class="ico-btn" onclick="openEdit('${lot.id}')" title="Edit">✏️</button><button class="ico-btn del" onclick="openDel('${lot.id}')" title="Delete">🗑️</button></div>`;
+    tr.appendChild(atd);
+    body.appendChild(tr);
+  });
+}
+
+function updField(el){
+  const lot=db.lotteries.find(l=>l.id===el.dataset.id);
+  if(lot){lot[el.dataset.k]=el.textContent.trim();saveDB();}
+}
+function updCustom(el){
+  const lot=db.lotteries.find(l=>l.id===el.dataset.id);
+  if(lot){if(!lot.custom)lot.custom={};lot.custom[el.dataset.ck]=el.textContent.trim();saveDB();}
+}
+function hlRow(id){
+  const r=document.getElementById('r_'+id);if(!r)return;
+  r.scrollIntoView({behavior:'smooth',block:'center'});
+  r.classList.remove('hl');void r.offsetWidth;r.classList.add('hl');
+  setTimeout(()=>r.classList.remove('hl'),3500);
+}
+
+// ── ADD / EDIT MODAL ──────────────────────────────────────
+let curImg=null;
+function openAdd(prefill){
+  document.getElementById('mTitle').textContent='Add Lottery';
+  document.getElementById('eId').value='';
+  document.getElementById('fBarcode').value=prefill||'';
+  document.getElementById('fLotId').value=prefill?extractLid(prefill):'';
+  document.getElementById('fName').value='';
+  document.getElementById('fPrice').value='';
+  document.getElementById('fImgUrl').value='';
+  document.getElementById('imgPrev').style.display='none';
+  document.getElementById('dupeWarn').style.display='none';
+  curImg=null;
+  renderCustFields(null);
+  document.getElementById('lotModal').style.display='flex';
+  if(prefill && isPackBC(prefill)) tlcAutofill(extractLid(prefill));
+  setTimeout(()=>document.getElementById('fBarcode').focus(),120);
+}
+function openEdit(id){
+  const l=db.lotteries.find(x=>x.id===id);if(!l)return;
+  document.getElementById('mTitle').textContent='Edit Lottery';
+  document.getElementById('eId').value=id;
+  document.getElementById('fBarcode').value=l.packBarcode||'';
+  document.getElementById('fLotId').value=l.lotteryId||'';
+  document.getElementById('fName').value=l.name||'';
+  document.getElementById('fPrice').value=l.price||'';
+  document.getElementById('fImgUrl').value='';
+  curImg=resolveImg(l.image)||null;
+  const prev=document.getElementById('imgPrev');
+  const _ri=resolveImg(l.image);
+  if(_ri){prev.src=_ri;prev.style.display='block'}else prev.style.display='none';
+  renderCustFields(l);
+  document.getElementById('lotModal').style.display='flex';
+}
+function closeLotModal(){document.getElementById('lotModal').style.display='none';curImg=null}
+function autoId(){
+  const b=document.getElementById('fBarcode').value.trim();
+  const warn=document.getElementById('dupeWarn');
+  const editId=document.getElementById('eId').value;
+  if(isPackBC(b)){
+    const lid=extractLid(b);
+    document.getElementById('fLotId').value=lid;
+    // Only check duplicates when adding new (not editing)
+    if(!editId){
+      const dupes=db.lotteries.filter(l=>l.lotteryId===lid);
+      if(dupes.length>0){
+        const names=dupes.map(l=>`"${l.name||'Unnamed'}" (row ${db.lotteries.indexOf(l)+1})`).join(', ');
+        document.getElementById('dupeMsg').textContent=`Lottery ID "${lid}" is already used by: ${names}`;
+        warn.style.display='block';
+      } else { warn.style.display='none'; }
+    }
+  } else { warn.style.display='none'; }
+  // Autofill from TLC if new lottery and name is empty
+  if(isPackBC(b) && !editId) {
+    const lid = extractLid(b);
+    const nameEl = document.getElementById('fName');
+    if(!nameEl.value.trim()) tlcAutofill(lid);
+  }
+}
+
+async function tlcAutofill(gameNumber) {
+  const nameEl = document.getElementById('fName');
+  const priceEl = document.getElementById('fPrice');
+  const totalEl = document.getElementById('cf_c_total_tickets_1780013226667');
+  try {
+    nameEl.placeholder = 'Fetching from TLC...';
+    const res = await fetch(`/api/tlc/scratch/${gameNumber}`);
+    const data = await res.json();
+    if (!data.ok) { nameEl.placeholder = 'e.g. Sizzling Hot $500,000'; return; }
+    if (data.name && !nameEl.value.trim()) nameEl.value = data.name;
+    if (data.price && !priceEl.value.trim()) priceEl.value = data.price;
+    if (data.packSize && totalEl && !totalEl.value.trim()) totalEl.value = data.packSize;
+    // Autofill image URL from TLC image pattern
+    const imgUrlEl = document.getElementById('fImgUrl');
+    if (imgUrlEl && !imgUrlEl.value.trim()) {
+      imgUrlEl.value = `https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/${gameNumber}_img1.gif`;
+      prevUrl();
+    }
+    nameEl.placeholder = 'e.g. Sizzling Hot $500,000';
+    toast('Auto-filled from TLC', 'ok');
+  } catch(e) {
+    nameEl.placeholder = 'e.g. Sizzling Hot $500,000';
+  }
+}
+
+function renderCustFields(lot){
+  const c=document.getElementById('custFields');
+  c.innerHTML=db.customCols.map(col=>`
+    <div class="fg"><label>${escH(col.label)}</label>
+    <input type="${col.type}" id="cf_${col.key}" placeholder="${escH(col.label)}" value="${escH((lot?.custom?.[col.key])||'')}"></div>
+  `).join('');
+}
+async function saveLottery(){
+  const id=document.getElementById('eId').value;
+  const bc=document.getElementById('fBarcode').value.trim();
+  const name=document.getElementById('fName').value.trim();
+  const price=document.getElementById('fPrice').value.trim();
+  const lid=document.getElementById('fLotId').value.trim()||(isPackBC(bc)?extractLid(bc):'');
+  if(!name&&!bc){toast('Enter a name or scan a barcode','err');return}
+  const custom={};
+  db.customCols.forEach(col=>{const el=document.getElementById('cf_'+col.key);if(el)custom[col.key]=el.value.trim();});
+  const urlVal=document.getElementById('fImgUrl').value.trim();
+  const rawImg=curImg||(urlVal?urlVal:null);
+  if(id){
+    const l=db.lotteries.find(x=>x.id===id);
+    if(l){
+      Object.assign(l,{packBarcode:bc,lotteryId:lid,name,price,custom});
+      if(rawImg&&rawImg.startsWith('data:')) await storeImg(l,rawImg);
+      else if(rawImg) l.image=rawImg;
+    }
+    toast('Lottery updated','ok');
+  } else {
+    const newLot={id:genId(),packBarcode:bc,lotteryId:lid,name,price,custom,image:null,createdAt:Date.now()};
+    if(rawImg&&rawImg.startsWith('data:')) await storeImg(newLot,rawImg);
+    else if(rawImg) newLot.image=rawImg;
+    db.lotteries.push(newLot);
+    toast('Lottery added','ok');
+  }
+  saveDB();renderTable();closeLotModal();
+}
+
+// ── IMAGE HANDLING ────────────────────────────────────────
+function onImgFile(ev){
+  const f=ev.target.files[0];if(!f)return;
+  resizeImg(f,d=>{curImg=d;const p=document.getElementById('imgPrev');p.src=d;p.style.display='block';});
+}
+function prevUrl(){
+  const u=document.getElementById('fImgUrl').value.trim(),p=document.getElementById('imgPrev');
+  if(u){p.src=u;p.style.display='block'}else p.style.display='none';
+}
+let editImgData=null;
+function openImgModal(id){
+  editImgData=null;
+  document.getElementById('imgEditId').value=id;
+  document.getElementById('editImgUrl').value='';
+  document.getElementById('editImgPrev').style.display='none';
+  const l=db.lotteries.find(x=>x.id===id);
+  if(l?.image){const p=document.getElementById('editImgPrev');const _r=resolveImg(l.image);if(_r){p.src=_r;p.style.display='block';}}
+  document.getElementById('imgModal').style.display='flex';
+}
+function onEditImgFile(ev){
+  const f=ev.target.files[0];if(!f)return;
+  resizeImg(f,d=>{editImgData=d;const p=document.getElementById('editImgPrev');p.src=d;p.style.display='block';});
+}
+function prevEditUrl(){
+  const u=document.getElementById('editImgUrl').value.trim(),p=document.getElementById('editImgPrev');
+  if(u){p.src=u;p.style.display='block'}else p.style.display='none';
+}
+async function saveImg(){
+  const id=document.getElementById('imgEditId').value;
+  const url=document.getElementById('editImgUrl').value.trim();
+  const rawImg=editImgData||(url?url:null);
+  if(!rawImg){toast('No image selected','err');return}
+  const l=db.lotteries.find(x=>x.id===id);
+  if(l){
+    if(rawImg.startsWith('data:')) await storeImg(l,rawImg);
+    else l.image=rawImg;
+    saveDB();renderTable();toast('Image saved','ok');
+  }
+  document.getElementById('imgModal').style.display='none';editImgData=null;
+}
+function resizeImg(file,cb){
+  const r=new FileReader();
+  r.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      const mw=200,mh=150;let w=img.width,h=img.height;
+      if(w>mw||h>mh){const ratio=Math.min(mw/w,mh/h);w=Math.round(w*ratio);h=Math.round(h*ratio)}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      cb(canvas.toDataURL('image/jpeg',.55));
+    };img.src=e.target.result;
+  };r.readAsDataURL(file);
+}
+async function compressAllImages(){
+  const targets=db.lotteries.filter(l=>l.image);
+  if(!targets.length){toast('No images to compress','info');return;}
+  let done=0,saved=0;
+  for(const l of targets){
+    const src=resolveImg(l.image);
+    if(!src||!src.startsWith('data:')) continue;
+    const before=src.length;
+    await new Promise(res=>{
+      const img=new Image();
+      img.onload=async()=>{
+        const canvas=document.createElement('canvas');
+        const mw=200,mh=150;let w=img.width,h=img.height;
+        if(w>mw||h>mh){const ratio=Math.min(mw/w,mh/h);w=Math.round(w*ratio);h=Math.round(h*ratio)}
+        canvas.width=w;canvas.height=h;canvas.getContext('2d').drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL('image/jpeg',.55);
+        saved+=before-compressed.length;done++;
+        await idbPut(l.id,compressed);
+        imgCache[l.id]=compressed;
+        if(!l.image.startsWith('idb:')) l.image='idb:'+l.id;
+        res();
+      };
+      img.src=src;
+    });
+  }
+  saveDB();renderTable();updateStorage();
+  toast(`Compressed ${done} images — saved ~${Math.round(saved/1024)} KB`,'ok');
+}
+
+// ── COLUMNS ───────────────────────────────────────────────
+function openColModal(){document.getElementById('colName').value='';document.getElementById('colModal').style.display='flex';setTimeout(()=>document.getElementById('colName').focus(),100);}
+function addCol(){
+  const label=document.getElementById('colName').value.trim();
+  const type=document.getElementById('colType').value;
+  if(!label){toast('Enter a column name','err');return}
+  const key='c_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+Date.now();
+  db.customCols.push({id:genId(),key,label,type});
+  saveDB();renderTable();document.getElementById('colModal').style.display='none';
+  toast(`Column "${label}" added`,'ok');
+}
+function rmCol(cid){
+  if(!confirm('Remove this column and all its data?'))return;
+  db.customCols=db.customCols.filter(c=>c.id!==cid);
+  saveDB();renderTable();toast('Column removed','ok');
+}
+
+// ── DELETE ────────────────────────────────────────────────
+function openDel(id){
+  const l=db.lotteries.find(x=>x.id===id);
+  document.getElementById('delId').value=id;
+  document.getElementById('delName').textContent=l?.name||'this lottery';
+  document.getElementById('delModal').style.display='flex';
+}
+function confirmDel(){
+  const id=document.getElementById('delId').value;
+  db.lotteries=db.lotteries.filter(l=>l.id!==id);
+  saveDB();renderTable();document.getElementById('delModal').style.display='none';
+  toast('Lottery deleted','ok');
+}
+
+// ── EXPORT / IMPORT ───────────────────────────────────────
+// Shared with manager's Repository — saves to same lotteryApp_repository key
+function adminRepoSave(typeId,filename,content,mimeType='text/csv'){
+  try{
+    const REPO_KEY='lotteryApp_repository';
+    const repo=JSON.parse(localStorage.getItem(REPO_KEY)||'{}');
+    if(!repo[typeId]) repo[typeId]=[];
+    repo[typeId].unshift({id:'r_'+Date.now(),filename,content,mimeType,savedAt:Date.now()});
+    if(repo[typeId].length>20) repo[typeId]=repo[typeId].slice(0,20);
+    localStorage.setItem(REPO_KEY,JSON.stringify(repo));
+  }catch(e){console.warn('repo save failed',e);}
+}
+
+function exportDB(){
+  const content=JSON.stringify(db,null,2);
+  const blob=new Blob([content],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  const fname='lottery-db-'+new Date().toISOString().slice(0,10)+'.json';
+  a.download=fname;a.click();
+  adminRepoSave('db_export',fname,content,'application/json');
+}
+function importDB(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const imp=JSON.parse(e.target.result);
+      if(!imp.lotteries)throw new Error();
+      if(confirm('Replace all current data with imported file?')){
+        db=imp;if(!db.customCols)db.customCols=[];
+        saveDB();renderTable();toast('Database imported','ok');
+      }
+    }catch{toast('Invalid file format','err')}
+  };r.readAsText(f);ev.target.value='';
+}
+
+// ── UTILS ─────────────────────────────────────────────────
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function escH(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function toast(msg,type='info'){
+  const c=document.getElementById('toasts'),t=document.createElement('div');
+  t.className='toast '+(type==='ok'?'ok':type==='err'?'err':'info');t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(110%)';t.style.transition='.3s';setTimeout(()=>t.remove(),350)},3200);
+}
+
+// ── TLC SYNC ─────────────────────────────────────────────
+const TLC_TTL=24*60*60*1000;
+
+async function syncLotteryTlc(id, gameNumber, force=false){
+  try{
+    const l=db.lotteries.find(x=>x.id===id);
+    if(!l) return false;
+    // Skip if synced recently (unless forced)
+    if(!force && l.tlcSyncedAt && Date.now()-l.tlcSyncedAt<TLC_TTL) return 'skipped';
+    const res=await fetch(`/api/tlc/scratch/${gameNumber}`);
+    const data=await res.json();
+    if(!data.ok){toast(`TLC: ${data.error}`,'err');return false;}
+    if(data.name) l.name=data.name;
+    if(data.price) l.price=data.price;
+    const totalKey='c_total_tickets_1780013226667';
+    if(data.packSize){if(!l.custom)l.custom={};l.custom[totalKey]=data.packSize;}
+    // Only fetch image if not already in IDB
+    if(!l.image||!l.image.startsWith('idb:')||!imgCache[l.id]){
+      const imgUrl=`https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/${gameNumber}_img1.gif`;
+      try{
+        const ir=await fetch(`/api/tlc/image?url=${encodeURIComponent(imgUrl)}`);
+        if(ir.ok){const b=await ir.json();if(b.dataUrl) await storeImg(l,b.dataUrl);}
+      }catch(e){l.image=imgUrl;}
+    }
+    l.tlcSyncedAt=Date.now();
+    return true;
+  }catch(e){
+    toast('TLC sync failed — is server running?','err');
+    return false;
+  }
+}
+
+async function syncAllTlc() {
+  const lotteries = db.lotteries.filter(l => l.lotteryId && /^\d{4}$/.test(l.lotteryId));
+  if (!lotteries.length) { toast('No lotteries with valid game numbers', 'info'); return; }
+  const stale = lotteries.filter(l => !l.tlcSyncedAt || Date.now()-l.tlcSyncedAt >= TLC_TTL);
+  if(!stale.length){ toast('All lotteries up to date (synced within 24h)','ok'); return; }
+  toast(`Syncing ${stale.length} lotteries (${lotteries.length-stale.length} up to date)...`, 'info');
+  const BATCH = 8;
+  let count = 0;
+  for(let i=0; i<stale.length; i+=BATCH){
+    const batch = stale.slice(i, i+BATCH);
+    const results = await Promise.all(batch.map(l => syncLotteryTlc(l.id, l.lotteryId, true)));
+    count += results.filter(r=>r===true).length;
+  }
+  saveDB(); renderTable();
+  toast(`Synced ${count} of ${stale.length} lotteries`, 'ok');
+}
+
+// ── TABS ─────────────────────────────────────────────────
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.getElementById('tabContent-'+tab).classList.add('active');
+  if(tab==='inv'){ renderInventory(); }
+}
+
+function switchInvSub(sub){
+  document.querySelectorAll('.inv-sub-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.inv-sub-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('invSub-'+sub).classList.add('active');
+  document.getElementById('invSubContent-'+sub).classList.add('active');
+  if(sub==='date') renderInvByDate();
+  else renderInvAll();
+}
+
+// ── INVENTORY STORAGE ─────────────────────────────────────
+const INV_KEY='lotteryApp_inventory';
+function loadInventory(){try{const r=localStorage.getItem(INV_KEY);return r?JSON.parse(r):[]}catch{return[]}}
+function saveInventory(inv){localStorage.setItem(INV_KEY,JSON.stringify(inv));}
+
+// ── INVENTORY RENDER ──────────────────────────────────────
+// ── INVENTORY FILTER HELPERS ─────────────────────────────
+function getInvDateRange(){
+  const from=document.getElementById('invDateFrom')?.value;
+  const to=document.getElementById('invDateTo')?.value;
+  const fromTs=from?new Date(from).setHours(0,0,0,0):null;
+  const toTs=to?new Date(to).setHours(23,59,59,999):null;
+  return {fromTs,toTs};
+}
+
+function invInDateRange(item,fromTs,toTs){
+  if(!fromTs&&!toTs) return true;
+  const ts=item.loadedAt;
+  if(fromTs&&ts<fromTs) return false;
+  if(toTs&&ts>toTs) return false;
+  return true;
+}
+
+function clearInvDates(){
+  document.getElementById('invDateFrom').value='';
+  document.getElementById('invDateTo').value='';
+  renderInventory();
+}
+
+// ── SORT & COLUMN FILTER STATE ───────────────────────────
+let invSort={col:null,dir:0}; // dir: 0=default,1=asc,2=desc
+let invColFilters={}; // col -> string
+let invFilterOpen=null; // col currently showing filter popup
+
+function invSortVal(item,col,mgrSlots){
+  const compositeId=(item.lotteryId||'')+(item.packId||item.packBarcode?.slice(4,11)||'');
+  const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
+  switch(col){
+    case 'name': return (item.name||'').toLowerCase();
+    case 'packBarcode': return item.packBarcode||'';
+    case 'lotteryId': return item.lotteryId||'';
+    case 'price': return parseFloat((item.price||'0').replace(/[^0-9.]/g,''))||0;
+    case 'totalTickets': return parseInt(item.totalTickets)||0;
+    case 'loadedAt': return item.loadedAt||0;
+    case 'activatedAt': return item.activatedAt||slot?.activatedAt||0;
+    case 'currentTicket': return slot?.currentTicket||0;
+    case 'settledAt': return item.settledAt||slot?.settledAt||0;
+    case 'finishedAt': return item.finishedAt||slot?.finishedAt||0;
+    default: return '';
+  }
+}
+
+function getFilteredInv(){
+  let mgrSlots=[];
+  try{const r=localStorage.getItem('lotteryApp_slots');if(r)mgrSlots=JSON.parse(r).slots||[];}catch(e){}
+  const inv=loadInventory();
+  const q=(document.getElementById('invSrch')?.value||'').toLowerCase();
+  const {fromTs,toTs}=getInvDateRange();
+  let result=inv.filter(item=>{
+    if(!invInDateRange(item,fromTs,toTs)) return false;
+    if(q&&!(
+      (item.name||'').toLowerCase().includes(q)||
+      (item.packBarcode||'').includes(q)||
+      (item.lotteryId||'').includes(q)
+    )) return false;
+    // Column filters
+    for(const [col,fval] of Object.entries(invColFilters)){
+      if(!fval) continue;
+      if(INV_DATE_COLS.has(col)){
+        // Date filter: match same calendar day (local time)
+        const ts=invSortVal(item,col,mgrSlots);
+        if(!ts){return false;}
+        const d=new Date(ts);
+        const itemDate=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        if(itemDate!==fval) return false;
+      } else {
+        const v=String(invSortVal(item,col,mgrSlots)).toLowerCase();
+        if(!v.includes(fval.toLowerCase())) return false;
+      }
+    }
+    return true;
+  });
+  if(invSort.col&&invSort.dir!==0){
+    const d=invSort.dir===1?1:-1;
+    result.sort((a,b)=>{
+      const av=invSortVal(a,invSort.col,mgrSlots);
+      const bv=invSortVal(b,invSort.col,mgrSlots);
+      if(av<bv) return -1*d;
+      if(av>bv) return 1*d;
+      return 0;
+    });
+  }
+  return result;
+}
+
+// ── CSV EXPORT ────────────────────────────────────────────
+function exportInvCSV(){
+  let mgrSlots=[];
+  try{const r=localStorage.getItem('lotteryApp_slots');if(r)mgrSlots=JSON.parse(r).slots||[];}catch(e){}
+  const inv=getFilteredInv();
+  if(!inv.length){toast('No records to export','warn');return;}
+  const fmtDate=ts=>ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+  const headers=['Lottery Name','Pack Barcode','Lottery ID','Price','Total Tickets','Loaded','Activated','Current Ticket','Settled','Sold Out'];
+  const rows=inv.map(item=>{
+    const compositeId=(item.lotteryId||'')+(item.packId||item.packBarcode?.slice(4,11)||'');
+    const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
+    return [
+      item.name||'',
+      item.packBarcode||'',
+      item.lotteryId||'',
+      item.price||'',
+      item.totalTickets||'',
+      fmtDate(item.loadedAt),
+      fmtDate(slot?.activatedAt),
+      slot?.activatedAt?(slot.isFinished?'Sold Out':String(slot.currentTicket||1)):'',
+      fmtDate(slot?.settledAt),
+      fmtDate(slot?.finishedAt)
+    ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',');
+  });
+  const csv=[headers.join(','),...rows].join('\n');
+  const fname='inventory-'+new Date().toISOString().slice(0,10)+'.csv';
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=fname;
+  a.click();
+  adminRepoSave('inventory_csv',fname,csv,'text/csv');
+  toast('CSV exported','ok');
+}
+
+// ── PDF EXPORT ────────────────────────────────────────────
+function exportInvPDF(){
+  let mgrSlots=[];
+  try{const r=localStorage.getItem('lotteryApp_slots');if(r)mgrSlots=JSON.parse(r).slots||[];}catch(e){}
+  const inv=getFilteredInv();
+  if(!inv.length){toast('No records to export','warn');return;}
+  const fmtDate=ts=>ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
+  const fromEl=document.getElementById('invDateFrom')?.value;
+  const toEl=document.getElementById('invDateTo')?.value;
+  const dateRange=fromEl||toEl?`${fromEl?'From '+fromEl:''} ${toEl?'To '+toEl:''}`.trim():'All dates';
+  const rows=inv.map(item=>{
+    const compositeId=(item.lotteryId||'')+(item.packId||item.packBarcode?.slice(4,11)||'');
+    const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
+    const ticketCell=slot?.activatedAt?(slot.isFinished?'Sold Out':String(slot.currentTicket||1)):'—';
+    return `<tr>
+      <td>${item.name||'—'}</td>
+      <td style="font-family:monospace;font-size:10px">${item.packBarcode||''}</td>
+      <td>${item.lotteryId||''}</td>
+      <td>${item.price||''}</td>
+      <td>${item.totalTickets||''}</td>
+      <td>${fmtDate(item.loadedAt)}</td>
+      <td>${fmtDate(slot?.activatedAt)}</td>
+      <td>${ticketCell}</td>
+      <td>${fmtDate(slot?.settledAt)}</td>
+      <td>${fmtDate(slot?.finishedAt)}</td>
+    </tr>`;
+  }).join('');
+  const w=window.open('','_blank');
+  w.document.write(
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventory Report</title><style>'
+    +'body{font-family:Arial,sans-serif;font-size:11px;margin:20px}'
+    +'h2{margin:0 0 4px;font-size:16px}.meta{color:#666;font-size:10px;margin-bottom:14px}'
+    +'table{width:100%;border-collapse:collapse}'
+    +'th{background:#0f172a;color:#fff;padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px}'
+    +'td{padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:10px}'
+    +'tr:nth-child(even) td{background:var(--row-even)}'
+    +'</style></head><body>'
+    +'<h2>Lottery Inventory Report</h2>'
+    +'<div class="meta">'+dateRange+' &nbsp;&middot;&nbsp; '+inv.length+' records &nbsp;&middot;&nbsp; Generated '+new Date().toLocaleString()+'</div>'
+    +'<table><thead><tr>'
+    +'<th>Name</th><th>Pack Barcode</th><th>ID</th><th>Price</th><th>Tickets</th>'
+    +'<th>Loaded</th><th>Activated</th><th>Current</th><th>Settled</th><th>Sold Out</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>'
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{w.print();},500);
+  const fname='inventory-'+new Date().toISOString().slice(0,10)+'.pdf';
+  adminRepoSave('inventory_pdf',fname,'[PDF — open from Reports > Repository to re-download as HTML]','text/html');
+  toast('PDF ready — print dialog opened','ok');
+}
+
+function deleteInvItem(packBarcode){
+  if(!confirm(`Delete inventory record for pack ${packBarcode}? If this pack is loaded in a slot, that slot will also be cleared.`)) return;
+  // Remove from inventory
+  let inv=loadInventory();
+  inv=inv.filter(i=>i.packBarcode!==packBarcode);
+  saveInventory(inv);
+  // Also clear from manager slots if loaded
+  try{
+    const lotteryId=packBarcode.slice(0,4);
+    const packId=packBarcode.slice(4,11);
+    const compositeId=lotteryId+packId;
+    const slotsRaw=localStorage.getItem('lotteryApp_slots');
+    if(slotsRaw){
+      const slotsData=JSON.parse(slotsRaw);
+      let cleared=0;
+      slotsData.slots.forEach(slot=>{
+        if(slot.uniquePackId===compositeId){
+          Object.assign(slot,{lotteryDbId:null,lotteryId:null,packBarcode:null,packId:null,
+            uniquePackId:null,currentTicket:1,lastUpdated:null,isFinished:false,
+            ticketHistory:[],totalTickets:null,settled:false});
+          cleared++;
+        }
+      });
+      if(cleared>0){
+        localStorage.setItem('lotteryApp_slots',JSON.stringify(slotsData));
+        localStorage.setItem('lotteryApp_updated',Date.now()+'');
+        toast(`Inventory deleted · ${cleared} slot${cleared>1?'s':''} cleared`,'ok');
+      } else {
+        toast('Inventory record deleted','ok');
+      }
+    }
+  }catch(e){ toast('Inventory deleted (could not check slots)','ok'); }
+  renderInventory();
+}
+
+function invSelectionChanged(){
+  const cbs=[...document.querySelectorAll('.inv-row-cb')];
+  const checked=cbs.filter(c=>c.checked);
+  const btn=document.getElementById('invDeleteSelBtn');
+  const countEl=document.getElementById('invSelCount');
+  const allCb=document.getElementById('invSelectAll');
+  if(btn) btn.style.display=checked.length?'inline-block':'none';
+  if(countEl) countEl.textContent=checked.length;
+  if(allCb) allCb.indeterminate=checked.length>0&&checked.length<cbs.length;
+  if(allCb) allCb.checked=cbs.length>0&&checked.length===cbs.length;
+}
+
+function invToggleAll(checked){
+  document.querySelectorAll('.inv-row-cb').forEach(cb=>cb.checked=checked);
+  invSelectionChanged();
+}
+
+function deleteSelectedInv(){
+  const selected=[...document.querySelectorAll('.inv-row-cb:checked')].map(cb=>cb.dataset.bc);
+  if(!selected.length) return;
+  if(!confirm(`Delete ${selected.length} inventory record${selected.length!==1?'s':''}? Any matching slots in the Manager will also be cleared.`)) return;
+  let inv=loadInventory();
+  inv=inv.filter(i=>!selected.includes(i.packBarcode));
+  saveInventory(inv);
+  // Clear matching slots
+  try{
+    const slotsRaw=localStorage.getItem('lotteryApp_slots');
+    if(slotsRaw){
+      const slotsData=JSON.parse(slotsRaw);
+      let cleared=0;
+      slotsData.slots.forEach(slot=>{
+        const compositeId=(slot.lotteryId||'')+(slot.packId||'');
+        const matchingBc=selected.find(bc=>bc.slice(0,4)===(slot.lotteryId||'')&&bc.slice(4,11)===(slot.packId||''));
+        if(matchingBc||selected.some(bc=>(bc.slice(0,4)+(bc.slice(4,11)))===compositeId)){
+          Object.assign(slot,{lotteryDbId:null,lotteryId:null,packBarcode:null,packId:null,
+            uniquePackId:null,currentTicket:1,lastUpdated:null,isFinished:false,
+            ticketHistory:[],totalTickets:null,settled:false});
+          cleared++;
+        }
+      });
+      if(cleared>0){
+        localStorage.setItem('lotteryApp_slots',JSON.stringify(slotsData));
+        localStorage.setItem('lotteryApp_updated',Date.now()+'');
+      }
+      toast(`${selected.length} record${selected.length!==1?'s':''} deleted${cleared?' · '+cleared+' slot'+(cleared!==1?'s':'')+' cleared':''}`,'ok');
+    }
+  }catch(e){ toast(`${selected.length} record${selected.length!==1?'s':''} deleted`,'ok'); }
+  renderInventory();
+}
+
+// ── INVENTORY PAGINATION ─────────────────────────────────
+const INV_PER_PAGE = 50;
+let invCurrentPage = 0;
+let _invDebounceTimer = null;
+let _invLastTab = null;
+
+function renderInventory(){
+  // Lazy: only render active sub-tab
+  clearTimeout(_invDebounceTimer);
+  _invDebounceTimer = setTimeout(()=>{
+    const dateActive = document.getElementById('invSubContent-date')?.classList.contains('active');
+    if(dateActive) renderInvByDate();
+    else renderInvAll();
+  }, 80);
+}
+
+function invChangePage(dir){
+  const filtered = getFilteredInv();
+  const pages = Math.ceil(filtered.length / INV_PER_PAGE);
+  invCurrentPage = Math.max(0, Math.min(invCurrentPage + dir, pages - 1));
+  renderInvAll();
+}
+
+function archiveOldInv(){
+  const inv = loadInventory();
+  const cutoff = Date.now() - 6*30*24*60*60*1000; // 6 months
+  const old = inv.filter(i => (i.loadedAt||0) < cutoff);
+  if(!old.length){ toast('No records older than 6 months','info'); return; }
+  if(!confirm(`Archive ${old.length} records older than 6 months? This cannot be undone.`)) return;
+  const kept = inv.filter(i => (i.loadedAt||0) >= cutoff);
+  saveInventory(kept);
+  invCurrentPage = 0;
+  renderInventory();
+  toast(`Archived ${old.length} records`,'ok');
+}
+
+function renderInvAll(){
+  const filtered = getFilteredInv();
+  const tbody = document.getElementById('invTBody');
+  const pagBar = document.getElementById('invPagBar');
+  let mgrSlots = [];
+  try{const r=localStorage.getItem('lotteryApp_slots');if(r)mgrSlots=JSON.parse(r).slots||[];}catch(e){}
+
+  if(!filtered.length){
+    tbody.innerHTML=`<tr><td colspan="13" style="text-align:center;padding:30px;color:var(--muted)">No inventory records yet</td></tr>`;
+    if(pagBar) pagBar.style.display='none';
+    return;
+  }
+
+  // Pagination
+  const total = filtered.length;
+  const pages = Math.ceil(total / INV_PER_PAGE);
+  invCurrentPage = Math.max(0, Math.min(invCurrentPage, pages - 1));
+  const page = filtered.slice(invCurrentPage * INV_PER_PAGE, (invCurrentPage + 1) * INV_PER_PAGE);
+
+  // Update pagination bar
+  if(pagBar){
+    pagBar.style.display = total > INV_PER_PAGE ? 'flex' : 'none';
+    document.getElementById('invPageInfo').textContent = `Page ${invCurrentPage+1} of ${pages}`;
+    document.getElementById('invTotalInfo').textContent = `${total} total records`;
+    document.getElementById('invPrevBtn').disabled = invCurrentPage === 0;
+    document.getElementById('invNextBtn').disabled = invCurrentPage >= pages - 1;
+  }
+
+  const fmtDate=ts=>ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
+  const fmtCell=(ts,color)=>ts?`<span style="font-size:11px;color:${color}">${fmtDate(ts)}</span>`:`<span style="font-size:11px;color:var(--muted)">—</span>`;
+
+  tbody.innerHTML = page.map(item=>{    const lot=db.lotteries.find(l=>l.lotteryId===item.lotteryId);
+    const img=resolveImg(lot?.image)?`<img src="${resolveImg(lot.image)}" style="width:42px;height:30px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">`
+      :`<div style="width:42px;height:30px;border-radius:4px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:14px">🎫</div>`;
+    const loaded=new Date(item.loadedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const compositeId=(item.lotteryId||'')+(item.packId||item.packBarcode?.slice(4,11)||'');
+    const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
+    const bc=escH(item.packBarcode);
+    return `<tr>
+      <td><input type="checkbox" class="inv-row-cb" data-bc="${bc}" onchange="invSelectionChanged()" style="cursor:pointer"></td>
+      <td>${img}</td>
+      <td><strong>${escH(item.name||'—')}</strong></td>
+      <td style="font-family:monospace;font-size:11px">${bc}</td>
+      <td><span class="badge b-id">${escH(item.lotteryId)}</span></td>
+      <td><span class="badge b-price">${escH(item.price||'—')}</span></td>
+      <td>${item.totalTickets||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${loaded}</td>
+      <td>${(item.activatedAt||slot?.activatedAt)?fmtCell(item.activatedAt||slot?.activatedAt,'var(--success)'):(slot?'<span style="font-size:11px;color:var(--muted)">Pre-update</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')}</td>
+      <td>${slot?(slot.isFinished?'<span style="font-size:11px;color:var(--danger)">Sold Out</span>':`<span style="font-size:12px;font-weight:700">${slot.currentTicket||1}</span>`):'<span style="font-size:11px;color:var(--muted)">—</span>'}</td>
+      <td>${fmtCell(item.settledAt||slot?.settledAt,'#7c3aed')}</td>
+      <td>${fmtCell(item.finishedAt||slot?.finishedAt,'var(--danger)')}</td>
+      <td><button onclick="deleteInvItem('${bc}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px" title="Delete">🗑</button></td>
+    </tr>`;
+  }).join('');
+  invSelectionChanged();
+  initInvTableHeaders();
+  updateSortIndicators();
+}
+
+
+function renderInvByDate(){
+  const inv=getFilteredInv();
+  const container=document.getElementById('invDateView');
+  if(!inv.length){container.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted)">No inventory records yet</div>`;return;}
+  // Group by date
+  const byDate={};
+  inv.forEach(item=>{
+    const d=new Date(item.loadedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    if(!byDate[d]) byDate[d]=[];
+    byDate[d].push(item);
+  });
+  // For each date, group by lottery name
+  let html='';
+  Object.entries(byDate).sort((a,b)=>new Date(b[0])-new Date(a[0])).forEach(([date,items])=>{
+    html+=`<div class="inv-date-group">${date}</div>`;
+    const byName={};
+    items.forEach(item=>{
+      const n=item.name||item.lotteryId||'Unknown';
+      if(!byName[n]) byName[n]=0;
+      byName[n]++;
+    });
+    Object.entries(byName).forEach(([name,count])=>{
+      const lot=db.lotteries.find(l=>(l.name||'')==name||(l.lotteryId||'')==name);
+      const img=resolveImg(lot?.image)
+        ?`<img src="${resolveImg(lot.image)}" style="width:36px;height:26px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0">`
+        :`<div style="width:36px;height:26px;border-radius:4px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">🎫</div>`;
+      html+=`<div class="inv-date-row" style="align-items:center;gap:10px">${img}<span style="flex:1">${escH(name)}</span><span style="font-weight:700;color:var(--primary)">${count} pack${count>1?'s':''}</span></div>`;
+    });
+  });
+  container.innerHTML=html;
+}
+
+// ── BULK SCAN ─────────────────────────────────────────────
+let bulkScanQueue=[];
+
+function openBulkScanModal(){
+  bulkScanQueue=[];
+  document.getElementById('bulkScanInput').value='';
+  document.getElementById('bulkScanResult').textContent='';
+  document.getElementById('bulkScanQueue').style.display='none';
+  document.getElementById('bulkScanQueue').innerHTML='';
+  document.getElementById('bulkScanCount').textContent='';
+  document.getElementById('bulkScanLoadBtn').style.display='none';
+  document.getElementById('bulkScanModal').style.display='flex';
+  setTimeout(()=>document.getElementById('bulkScanInput').focus(),100);
+}
+
+function closeBulkScanModal(){
+  document.getElementById('bulkScanModal').style.display='none';
+  bulkScanQueue=[];
+}
+
+function bulkScanValidate(){
+  const val=document.getElementById('bulkScanInput').value.trim();
+  const res=document.getElementById('bulkScanResult');
+  if(!val){res.textContent='';return;}
+  if(!/^\d{14}$/.test(val)){res.style.color='var(--muted)';res.textContent=`${val.length}/14 digits`;return;}
+  // Check duplicate in current queue
+  if(bulkScanQueue.find(i=>i.packBarcode===val)){
+    res.style.color='var(--warn)';res.textContent='Already scanned — will be ignored';return;
+  }
+  const lotteryId=val.slice(0,4);
+  const lot=db.lotteries.find(l=>l.lotteryId===lotteryId);
+  if(lot){res.style.color='var(--success)';res.textContent=`✓ ${lot.name||lotteryId} (${lot.price||'—'})`;}
+  else{res.style.color='var(--warn)';res.textContent=`⚠ Lottery ID "${lotteryId}" not in database — will attempt TLC lookup`;}
+}
+
+async function bulkScanAdd(){
+  const inp=document.getElementById('bulkScanInput');
+  const val=inp.value.trim();
+  const res=document.getElementById('bulkScanResult');
+  if(!/^\d{14}$/.test(val)){toast('Enter a valid 14-digit barcode','err');return;}
+  // Block duplicate
+  if(bulkScanQueue.find(i=>i.packBarcode===val)){
+    res.style.color='var(--warn)';res.textContent='Duplicate — ignored';
+    inp.value='';setTimeout(()=>{res.textContent='';},2000);return;
+  }
+  const lotteryId=val.slice(0,4);
+  const packId=val.slice(4,11);
+  let lot=db.lotteries.find(l=>l.lotteryId===lotteryId);
+  let status='ok';
+  if(!lot){
+    // Try TLC
+    res.style.color='var(--muted)';res.textContent=`Looking up ID "${lotteryId}" on TLC...`;
+    try{
+      const r=await fetch(`/api/tlc/scratch/${lotteryId}`);
+      const d=await r.json();
+      if(d.ok&&d.name){
+        // Auto-add to DB
+        const newLot={id:genId(),packBarcode:null,lotteryId,name:d.name,price:d.price||'',custom:{},createdAt:Date.now()};
+        if(d.packSize){const totalKey='c_total_tickets_1780013226667';newLot.custom[totalKey]=d.packSize;}
+        // Try image
+        try{
+          const ir=await fetch(`/api/tlc/image?url=${encodeURIComponent('https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/'+lotteryId+'_img1.gif')}`);
+          const ib=await ir.json();if(ib.dataUrl) await storeImg(newLot,ib.dataUrl);
+        }catch(e){}
+        db.lotteries.push(newLot);saveDB();renderTable();
+        lot=newLot;
+        toast(`Auto-added: ${d.name}`,'ok');
+      } else {
+        status='unknown';
+      }
+    }catch(e){status='unknown';}
+    if(status==='unknown'){
+      res.style.color='var(--danger)';res.textContent=`Could not find ID "${lotteryId}" on TLC — fetch failed or game not found.`;
+      return;
+    }
+  }
+  const item={
+    packBarcode:val,lotteryId,packId,
+    name:lot.name||lotteryId,
+    price:lot.price||'',
+    totalTickets:getTotalTicketsFromLot(lot)||'',
+    loadedAt:Date.now(),
+    status
+  };
+  bulkScanQueue.push(item);
+  inp.value='';
+  res.style.color='var(--success)';res.textContent=`✓ Added: ${item.name}`;
+  renderBulkScanQueue();
+  setTimeout(()=>inp.focus(),50);
+}
+
+function getTotalTicketsFromLot(lot){
+  if(!lot||!lot.custom) return null;
+  const key=Object.keys(lot.custom).find(k=>k.includes('total_tickets'));
+  return key?lot.custom[key]:null;
+}
+
+function renderBulkScanQueue(){
+  const q=document.getElementById('bulkScanQueue');
+  const count=document.getElementById('bulkScanCount');
+  const loadBtn=document.getElementById('bulkScanLoadBtn');
+  if(!bulkScanQueue.length){q.style.display='none';count.textContent='';loadBtn.style.display='none';return;}
+  q.style.display='block';
+  loadBtn.style.display='inline-block';
+  count.textContent=`${bulkScanQueue.length} pack${bulkScanQueue.length>1?'s':''} queued`;
+  q.innerHTML=bulkScanQueue.map((item,i)=>{
+    const lot=db.lotteries.find(l=>l.lotteryId===item.lotteryId);
+    const img=resolveImg(lot?.image)?`<img class="sq-img" src="${resolveImg(lot.image)}" alt="">`:`<div class="sq-no-img">🎫</div>`;
+    return `<div class="scan-queue-item">
+      ${img}
+      <div class="sq-info">
+        <div class="sq-name">${escH(item.name)}</div>
+        <div class="sq-meta">${escH(item.packBarcode)} · ${escH(item.lotteryId)} · ${escH(item.price||'—')}</div>
+      </div>
+      <span class="sq-status ok">✓ Ready</span>
+      <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px" onclick="bulkScanRemove(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function bulkScanRemove(i){
+  bulkScanQueue.splice(i,1);
+  renderBulkScanQueue();
+}
+
+function bulkScanLoad(){
+  if(!bulkScanQueue.length){toast('Nothing to load','warn');return;}
+  const inv=loadInventory();
+  let added=0;
+  bulkScanQueue.forEach(item=>{
+    if(!inv.find(i=>i.packBarcode===item.packBarcode)){
+      // Normalize loadedAt to noon of that day for consistent date grouping
+    const _d=new Date(item.loadedAt);
+    item.loadedAt=new Date(_d.getFullYear(),_d.getMonth(),_d.getDate(),12,0,0).getTime();
+    inv.push(item);added++;
+    }
+  });
+  saveInventory(inv);
+  closeBulkScanModal();
+  renderInventory();
+  toast(`${added} pack${added>1?'s':''} added to inventory`,'ok');
+}
+
+// Route scanner to bulk scan modal when open
+const _origHandleBarcode=handleBarcode;
+function handleBarcode(code){
+  if(document.getElementById('bulkScanModal').style.display!=='none'){
+    const inp=document.getElementById('bulkScanInput');
+    if(inp){inp.value=code;bulkScanValidate();bulkScanAdd();}
+    return;
+  }
+  _origHandleBarcode(code);
+}
+
+// ── TLC REPORT IMPORT ─────────────────────────────────────
+let tlcRptQueue=[];  // [{gameNo, packNo, confirmDate, name, price, totalTickets, lot, status, note, isNew}]
+
+function closeTlcReportModal(){
+  document.getElementById('tlcReportModal').style.display='none';
+  document.getElementById('tlcRptProcessing').style.display='none';
+  document.getElementById('tlcRptResults').style.display='none';
+  tlcRptQueue=[];
+  document.getElementById('tlcReportFile').value='';
+}
+
+async function importTlcReport(ev){
+  const file=ev.target.files[0];
+  if(!file) return;
+  document.getElementById('tlcReportModal').style.display='flex';
+  document.getElementById('tlcRptProcessing').style.display='block';
+  document.getElementById('tlcRptResults').style.display='none';
+  document.getElementById('tlcRptProgressMsg').textContent='Reading file...';
+
+  // Read xlsx via SheetJS (already bundled in browser? No — use FileReader + fetch workaround)
+  // We'll parse using a minimal approach: read as ArrayBuffer, send to server, or parse client-side
+  // SheetJS is not available here — use a simple binary parse via FileReader + openpyxl-style
+  // Actually: we'll read via a temporary server endpoint — but simpler: use a DataURL + iframe hack?
+  // Best approach: load SheetJS from CDN dynamically
+  try{
+    await loadSheetJs();
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    parseTlcReportRows(rows);
+  }catch(e){
+    document.getElementById('tlcRptProgressMsg').textContent='Failed to read file: '+e.message;
+  }
+}
+
+let _sheetJsLoaded=false;
+function loadSheetJs(){
+  if(_sheetJsLoaded&&window.XLSX) return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>{_sheetJsLoaded=true;res();};
+    s.onerror=()=>rej(new Error('Could not load XLSX library'));
+    document.head.appendChild(s);
+  });
+}
+
+async function parseTlcReportRows(rows){
+  // Find header row: contains 'Game No' or 'Game' and 'Pack No' or 'Pack'
+  let headerIdx=-1,colMap={};
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i].map(c=>String(c).trim().toLowerCase());
+    const gIdx=r.findIndex(c=>c.includes('game no')||c==='game');
+    const pIdx=r.findIndex(c=>c.includes('pack no')||c==='pack');
+    if(gIdx>=0&&pIdx>=0){
+      headerIdx=i;
+      colMap.game=gIdx; colMap.pack=pIdx;
+      colMap.name=r.findIndex(c=>c.includes('game name')||c==='name');
+      colMap.confirm=r.findIndex(c=>c.includes('confirm'));
+      colMap.activate=r.findIndex(c=>c.includes('activat'));
+      colMap.settle=r.findIndex(c=>c.includes('settle'));
+      break;
+    }
+  }
+  if(headerIdx<0){
+    document.getElementById('tlcRptProgressMsg').textContent='Could not find data columns in this file. Expected "Game No" and "Pack No" columns.';
+    return;
+  }
+
+  const dataRows=rows.slice(headerIdx+1).filter(r=>{
+    const g=String(r[colMap.game]||'').trim();
+    return /^\d{4}$/.test(g);
+  });
+
+  if(!dataRows.length){
+    document.getElementById('tlcRptProgressMsg').textContent='No valid data rows found.';
+    return;
+  }
+
+  document.getElementById('tlcRptProgressMsg').textContent=`Processing ${dataRows.length} packs...`;
+  const inv=loadInventory();
+  const tlcCache={};
+  tlcRptQueue=[];
+
+  for(let i=0;i<dataRows.length;i++){
+    const row=dataRows[i];
+    const gameNo=String(row[colMap.game]||'').trim().padStart(4,'0');
+    const packNo=String(row[colMap.pack]||'').trim().padStart(7,'0');
+    const packBarcode=gameNo+packNo; // 11-char composite key
+    document.getElementById('tlcRptProgressMsg').textContent=`Processing ${i+1} of ${dataRows.length}: Game ${gameNo} Pack ${packNo}`;
+
+    // Parse confirm date for loadedAt
+    const parseDate=v=>{
+      if(!v) return null;
+      const parsed=v instanceof Date?v:new Date(v);
+      if(isNaN(parsed)) return null;
+      return new Date(parsed.getFullYear(),parsed.getMonth(),parsed.getDate(),12,0,0).getTime();
+    };
+    const loadedAt=parseDate(colMap.confirm>=0?row[colMap.confirm]:null)||Date.now();
+    const activatedAt=parseDate(colMap.activate>=0?row[colMap.activate]:null);
+    const settledAt=parseDate(colMap.settle>=0?row[colMap.settle]:null);
+
+    // Already in inventory?
+    if(inv.find(r=>r.packBarcode===packBarcode||r.lotteryId===gameNo&&r.packId===packNo)){
+      tlcRptQueue.push({gameNo,packNo,packBarcode,loadedAt,activatedAt,settledAt,status:'dup',note:'Already in inventory',lot:null});
+      continue;
+    }
+
+    let lot=db.lotteries.find(l=>l.lotteryId===gameNo);
+    let isNew=false;
+
+    if(!lot){
+      if(!tlcCache[gameNo]){
+        try{
+          const r=await fetch(`/api/tlc/scratch/${gameNo}`);
+          tlcCache[gameNo]=await r.json();
+        }catch(e){tlcCache[gameNo]={ok:false};}
+      }
+      const d=tlcCache[gameNo];
+      if(d.ok&&d.name){
+        lot=db.lotteries.find(l=>l.lotteryId===gameNo); // may have been added by earlier row
+        if(!lot){
+          const newLot={id:genId(),packBarcode:null,lotteryId:gameNo,name:d.name,price:d.price||'',custom:{},createdAt:Date.now()};
+          if(d.packSize){const tk=Object.keys(db.lotteries[0]?.custom||{}).find(k=>k.includes('total_tickets'))||'c_total_tickets_1780013226667';newLot.custom[tk]=d.packSize;}
+          try{
+            const ir=await fetch(`/api/tlc/image?url=${encodeURIComponent('https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/'+gameNo+'_img1.gif')}`);
+            const ib=await ir.json();if(ib.dataUrl) await storeImg(newLot,ib.dataUrl);
+          }catch(e){}
+          db.lotteries.push(newLot);saveDB();renderTable();
+          lot=newLot;isNew=true;
+        }
+        tlcRptQueue.push({gameNo,packNo,packBarcode,loadedAt,activatedAt,settledAt,lot,status:'ok',note:isNew?`New lottery type added: ${lot.name}`:'',isNew});
+      } else {
+        tlcRptQueue.push({gameNo,packNo,packBarcode,loadedAt,activatedAt,settledAt,lot:null,status:'unknown',
+          note:`Game #${gameNo} not found on TLC — add manually in Lottery Types`});
+      }
+    } else {
+      tlcRptQueue.push({gameNo,packNo,packBarcode,loadedAt,activatedAt,settledAt,lot,status:'ok',note:''});
+    }
+  }
+
+  renderTlcRptResults();
+}
+
+function renderTlcRptResults(){
+  document.getElementById('tlcRptProcessing').style.display='none';
+  document.getElementById('tlcRptResults').style.display='block';
+
+  const ok=tlcRptQueue.filter(r=>r.status==='ok');
+  const dup=tlcRptQueue.filter(r=>r.status==='dup');
+  const unknown=tlcRptQueue.filter(r=>r.status==='unknown');
+  const isNew=tlcRptQueue.filter(r=>r.isNew);
+
+  let summary=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+    <span style="font-size:13px;font-weight:700;color:var(--success)">✓ ${ok.length} ready to import</span>
+    ${isNew.length?`<span style="font-size:13px;font-weight:700;color:var(--primary)">★ ${isNew.length} new lottery type${isNew.length!==1?'s':''} added</span>`:''}
+    ${dup.length?`<span style="font-size:13px;color:var(--muted)">${dup.length} already in inventory</span>`:''}
+    ${unknown.length?`<span style="font-size:13px;font-weight:700;color:var(--warn)">⚠ ${unknown.length} unknown</span>`:''}
+  </div>`;
+  document.getElementById('tlcRptSummary').innerHTML=summary;
+
+  let html='';
+  tlcRptQueue.forEach(r=>{
+    const color=r.status==='ok'?'var(--success)':r.status==='dup'?'var(--muted)':'var(--warn)';
+    const icon=r.status==='ok'?'✓':r.status==='dup'?'—':'⚠';
+    const bg=r.status==='unknown'?'#fffbeb':r.status==='dup'?'#f8fafc':'';
+    const img=resolveImg(r.lot?.image);
+    const imgEl=img
+      ?`<img src="${img}" style="width:36px;height:26px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0">`
+      :`<div style="width:36px;height:26px;border-radius:4px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">🎫</div>`;
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px;background:${bg}">
+      <span style="color:${color};font-weight:700;width:14px;flex-shrink:0">${icon}</span>
+      ${imgEl}
+      <span style="flex:1">
+        <span style="font-weight:700">${escH(r.lot?.name||'Game #'+r.gameNo)}</span>
+        <span style="color:var(--muted);margin-left:8px;font-family:monospace;font-size:11px">${r.gameNo} · ${r.packNo}</span>
+      </span>
+      ${r.isNew?`<span style="font-size:10px;font-weight:700;color:var(--primary);background:#eff6ff;padding:2px 6px;border-radius:10px">NEW</span>`:''}
+      ${r.note&&!r.isNew?`<span style="font-size:10px;color:${color}">${escH(r.note)}</span>`:''}
+    </div>`;
+  });
+  document.getElementById('tlcRptList').innerHTML=html;
+  document.getElementById('tlcRptFootnote').textContent=
+    ok.length?`Loaded date set from Confirm Date in the report.`:'';
+
+  const loadBtn=document.getElementById('tlcRptLoadBtn');
+  loadBtn.disabled=ok.length===0;
+  loadBtn.style.opacity=ok.length?'':'0.4';
+}
+
+function tlcRptLoad(){
+  const inv=loadInventory();
+  let added=0;
+  tlcRptQueue.filter(r=>r.status==='ok').forEach(r=>{
+    if(!inv.find(i=>i.packBarcode===r.packBarcode)){
+      inv.push({
+        packBarcode:r.packBarcode,
+        lotteryId:r.gameNo,
+        packId:r.packNo,
+        name:r.lot?.name||r.gameNo,
+        price:r.lot?.price||'',
+        totalTickets:getTotalTicketsFromLot(r.lot)||'',
+        loadedAt:r.loadedAt,
+        ...(r.activatedAt&&{activatedAt:r.activatedAt}),
+        ...(r.settledAt&&{settledAt:r.settledAt})
+      });
+      added++;
+    }
+  });
+  saveInventory(inv);
+  closeTlcReportModal();
+  renderInventory();
+  const newCount=tlcRptQueue.filter(r=>r.isNew).length;
+  toast(`${added} pack${added!==1?'s':''} added from TLC report${newCount?' · '+newCount+' new lottery type(s) added':''}`,'ok');
+}
+
+// INIT
+function applyExternalTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme==='light' ? '' : 'dark');
+}
+applyExternalTheme(localStorage.getItem('lotteryApp_theme')||'dark');
+window.addEventListener('storage',e=>{
+  if(e.key==='lotteryApp_theme') applyExternalTheme(e.newValue||'dark');
+});
+renderTable();updateStorage();
+warmImgCache().then(()=>migrateImagesToIdb()).then(()=>{renderTable();updateStorage();});
+migrateImgUrls();
+
+async function migrateImgUrls(){
+  // Only run once ever — version '2' means img1.gif migration done
+  if(localStorage.getItem('lotteryApp_imgMigrated')==='2') return;
+  let changed=false;
+  for(const lot of db.lotteries){
+    if(!lot.lotteryId) continue;
+    // Skip if already has a valid stored image
+    if(lot.image && lot.image.startsWith('idb:') && imgCache[lot.id]) continue;
+    const newUrl=`https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/${lot.lotteryId}_img1.gif`;
+    try{
+      const r=await fetch(`/api/tlc/image?url=${encodeURIComponent(newUrl)}`);
+      const b=await r.json();
+      if(b.dataUrl){ await storeImg(lot,b.dataUrl); changed=true; }
+    }catch(e){ console.warn('[migrate] failed for',lot.lotteryId,e.message); }
+  }
+  if(changed){ saveDB(); renderTable(); toast('Slot images updated to front-of-ticket art','ok'); }
+  localStorage.setItem('lotteryApp_imgMigrated','2');
+}
+
+// ── SHELL INTEGRATION ─────────────────────────────────────
+// When hosted inside the shell (lottery-app.html), this file is loaded
+// twice — once as the "Lottery Types" tab (#tab=db) and once as the
+// "Inventory" tab (#tab=inv). Read the hash to show the right view and
+// hide the internal tab bar (the shell provides top-level tabs).
+(function initShellMode(){
+  const inShell = (window.parent && window.parent!==window);
+  if(!inShell) return;
+  const hash = (location.hash||'').replace('#','');
+  const params = new URLSearchParams(hash);
+  const tab = params.get('tab') || 'db';
+  // Hide the internal tab bar row
+  const tabRow = document.getElementById('tab-db')?.parentElement;
+  if(tabRow) tabRow.style.display='none';
+  switchTab(tab);
+})();
+
+// ── TLC DETAILS ───────────────────────────────────────────
+let tlcCurrentLotId = null;
+
+function openTlcDetails(id) {
+  const lot = db.lotteries.find(l => l.id === id);
+  if (!lot) return;
+  tlcCurrentLotId = lot.lotteryId;
+  document.getElementById('tlcModal').style.display = 'flex';
+  document.getElementById('tlcRefreshBtn').style.display = 'none';
+  fetchTlcData(lot.lotteryId);
+}
+
+function closeTlcModal() {
+  document.getElementById('tlcModal').style.display = 'none';
+  tlcCurrentLotId = null;
+}
+
+function tlcRefresh() {
+  if (tlcCurrentLotId) fetchTlcData(tlcCurrentLotId);
+}
+
+async function fetchTlcData(gameNumber) {
+  const body = document.getElementById('tlcModalBody');
+  document.getElementById('tlcRefreshBtn').style.display = 'none';
+
+  body.innerHTML = `<div class="tlc-loading"><div class="tlc-spinner"></div><div>Fetching TLC data for Game #${escH(gameNumber)}...</div></div>`;
+
+  try {
+    const res = await fetch(`/api/tlc/scratch/${gameNumber}`);
+    const data = await res.json();
+    if (!data.ok) {
+      body.innerHTML = `
+        <div class="tlc-error">
+          <div class="tlc-error-icon">⚠️</div>
+          <div><strong>Could not load data</strong></div>
+          <div class="tlc-not-found">${escH(data.error)}</div>
+        </div>`;
+      document.getElementById('tlcRefreshBtn').style.display = 'inline-block';
+      return;
+    }
+    renderTlcData(body, data, gameNumber);
+    document.getElementById('tlcRefreshBtn').style.display = 'inline-block';
+  } catch (e) {
+    body.innerHTML = `
+      <div class="tlc-error">
+        <div class="tlc-error-icon">🔌</div>
+        <div><strong>Server not reachable</strong></div>
+        <div class="tlc-not-found">Make sure the app is running via server.js (not opened directly as a file).</div>
+      </div>`;
+    document.getElementById('tlcRefreshBtn').style.display = 'inline-block';
+  }
+}
+
+function renderTlcData(body, data, gameNumber) {
+  const closingBadge = data.closing ? `<span class="tlc-badge closing">⚠ Closing Soon</span>` : '';
+  const priceBadge = data.price ? `<span class="tlc-badge price">${escH(data.price)}</span>` : '';
+  const dateBadge = data.startDate ? `<span class="tlc-badge date">Started ${escH(data.startDate)}</span>` : '';
+  const idBadge = `<span class="tlc-badge id">Game #${escH(gameNumber)}</span>`;
+
+  let prizesHtml = '';
+  if (data.prizes && data.prizes.length) {
+    const rows = data.prizes.map(p => {
+      const printedN = parseInt((p.printed || '0').replace(/,/g, ''), 10);
+      const claimedN = parseInt((p.claimed || '0').replace(/,/g, ''), 10);
+      const pct = printedN > 0 && !isNaN(claimedN) ? Math.min(100, Math.round(claimedN / printedN * 100)) : 0;
+      const fillClass = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
+      const claimedCell = p.claimed === '---'
+        ? '<span style="color:var(--muted)">—</span>'
+        : `${escH(p.claimed)}<div class="tlc-claimed-bar"><div class="tlc-claimed-fill ${fillClass}" style="width:${pct}%"></div></div>`;
+      return `<tr>
+        <td><strong>${escH(p.amount)}</strong></td>
+        <td>${escH(p.printed)}</td>
+        <td>${claimedCell}</td>
+      </tr>`;
+    }).join('');
+
+    prizesHtml = `
+      <div class="tlc-section">
+        <div class="tlc-section-title">Prize Tiers</div>
+        <table class="tlc-prize-table">
+          <thead><tr><th>Prize</th><th>Printed</th><th>Claimed</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${data.asOf ? `<div class="tlc-as-of">Data as of ${escH(data.asOf)}</div>` : ''}
+      </div>`;
+  } else {
+    prizesHtml = `<div class="tlc-not-found">No prize tier data found for this game.</div>`;
+  }
+
+  const fetchTime = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : '';
+
+  body.innerHTML = `
+    <div class="tlc-header">
+      <div>
+        <div class="tlc-title">${escH(data.name || `Game #${gameNumber}`)}</div>
+        <div class="tlc-meta">${idBadge}${priceBadge}${dateBadge}${closingBadge}</div>
+      </div>
+    </div>
+    ${prizesHtml}
+    <div class="tlc-fetch-time">Fetched: ${fetchTime}</div>`;
+}
+
+
+// ── SORTABLE / FILTERABLE HEADERS ────────────────────────
+function initInvTableHeaders(){
+  const tr=document.getElementById('invTHeadRow');
+  if(!tr) return;
+  tr.querySelectorAll('th[data-col]').forEach(th=>{
+    if(th.querySelector('.th-inner')) return; // already initialized
+    const col=th.dataset.col;
+    const label=th.textContent.trim();
+    th.innerHTML=`<span class="th-inner"><span class="th-label">${label}</span><span class="th-sort" id="thSort_${col}">-</span><span class="th-filter-btn ${invColFilters[col]?'has-filter':''}" id="thFBtn_${col}" title="Filter" onclick="event.stopPropagation();openInvFilter('${col}',this)">:</span></span>`;
+    th.addEventListener('click',()=>invCycleSort(col));
+  });
+}
+
+function invCycleSort(col){
+  if(invSort.col===col){
+    invSort.dir=(invSort.dir+1)%3;
+    if(invSort.dir===0) invSort.col=null;
+  } else {
+    invSort.col=col; invSort.dir=1;
+  }
+  updateSortIndicators();
+  renderInvAll();
+}
+
+function updateSortIndicators(){
+  document.querySelectorAll('[id^="thSort_"]').forEach(el=>{
+    const col=el.id.replace('thSort_','');
+    if(invSort.col===col){
+      el.textContent=invSort.dir===1?'↑':'↓';
+      el.classList.add('active');
+    } else {
+      el.textContent='-';
+      el.classList.remove('active');
+    }
+  });
+}
+
+const INV_DATE_COLS=new Set(['loadedAt','activatedAt','settledAt','finishedAt']);
+
+function openInvFilter(col, btnEl){
+  closeInvFilter();
+  invFilterOpen=col;
+  const popup=document.createElement('div');
+  popup.className='inv-filter-popup';
+  popup.id='invFilterPopup';
+  const rect=btnEl.getBoundingClientRect();
+  popup.style.top=(rect.bottom+4)+'px';
+  popup.style.left=Math.min(rect.left, window.innerWidth-220)+'px';
+  const cur=invColFilters[col]||'';
+  const isDate=INV_DATE_COLS.has(col);
+  const colLabel=col.replace(/([A-Z])/g,' $1').toLowerCase();
+  if(isDate){
+    // Parse stored value back to date input format (yyyy-mm-dd)
+    let dateVal='';
+    if(cur){const d=new Date(cur);if(!isNaN(d))dateVal=d.toISOString().slice(0,10);}
+    popup.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">${colLabel}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">mm/dd/yyyy</div>
+      <input id="invFilterInput" type="date" value="${dateVal}" style="color-scheme:dark"
+        onkeydown="if(event.key==='Escape')closeInvFilter()">
+      <div class="fp-btns">
+        <button class="fp-apply" onclick="applyInvFilter('${col}')">Apply</button>
+        <button class="fp-clear" onclick="clearInvFilter('${col}')">Clear</button>
+      </div>`;
+  } else {
+    popup.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">${colLabel}</div>
+      <input id="invFilterInput" type="text" placeholder="Filter..." value="${escH(cur)}"
+        onkeydown="if(event.key==='Enter')applyInvFilter('${col}');if(event.key==='Escape')closeInvFilter()">
+      <div class="fp-btns">
+        <button class="fp-apply" onclick="applyInvFilter('${col}')">Apply</button>
+        <button class="fp-clear" onclick="clearInvFilter('${col}')">Clear</button>
+      </div>`;
+  }
+  document.body.appendChild(popup);
+  setTimeout(()=>document.getElementById('invFilterInput')?.focus(),50);
+  setTimeout(()=>document.addEventListener('mousedown',invFilterOutsideClick),50);
+}
+
+function applyInvFilter(col){
+  const inp=document.getElementById('invFilterInput');
+  if(!inp) return;
+  const isDate=INV_DATE_COLS.has(col);
+  let val='';
+  if(isDate){
+    // Store as ISO date string (yyyy-mm-dd) for consistent comparison
+    val=inp.value||'';
+  } else {
+    val=inp.value.trim();
+  }
+  if(val) invColFilters[col]=val; else delete invColFilters[col];
+  const btn=document.getElementById('thFBtn_'+col);
+  if(btn) btn.classList.toggle('has-filter',!!val);
+  closeInvFilter();
+  renderInvAll();
+}
+
+function clearInvFilter(col){
+  delete invColFilters[col];
+  const btn=document.getElementById('thFBtn_'+col);
+  if(btn) btn.classList.remove('has-filter');
+  closeInvFilter();
+  renderInvAll();
+}
+
+function closeInvFilter(){
+  const p=document.getElementById('invFilterPopup');
+  if(p) p.remove();
+  invFilterOpen=null;
+  document.removeEventListener('mousedown',invFilterOutsideClick);
+}
+
+function invFilterOutsideClick(e){
+  const p=document.getElementById('invFilterPopup');
+  if(p&&!p.contains(e.target)) closeInvFilter();
+}
+
+// Re-init headers after each renderInvAll call
+const _origRenderInvAll=renderInvAll;
+</script>
+</body>
+</html>

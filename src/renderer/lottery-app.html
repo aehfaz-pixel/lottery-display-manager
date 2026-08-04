@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lottery App</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;
+  --border:#30363d;--text:#e6edf3;--muted:#9da7b3;
+  --accent:#f5c500;--primary:#1f6feb;--green:#3fb950;--warn:#d29922;
+}
+html[data-theme="light"]{
+  --bg:#f6f8fa;--surface:#ffffff;--surface2:#eef1f4;
+  --border:#d0d7de;--text:#1f2328;--muted:#57606a;
+  --accent:#9a6700;--primary:#0969da;--green:#1a7f37;--warn:#9a6700;
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+#shell{display:flex;flex-direction:column;height:100vh}
+#tabbar{
+  display:flex;align-items:center;gap:4px;
+  background:var(--surface2);border-bottom:1.5px solid var(--border);
+  padding:0 10px;flex-shrink:0;height:46px;
+}
+#tabbar .brand{font-weight:800;font-size:14px;color:var(--accent);margin-right:14px;letter-spacing:.5px;white-space:nowrap}
+.shell-tab{
+  appearance:none;border:none;background:transparent;color:var(--muted);
+  font-size:13px;font-weight:600;padding:8px 16px;border-radius:7px 7px 0 0;
+  cursor:pointer;height:46px;border-bottom:2.5px solid transparent;transition:all .15s;
+}
+.shell-tab:hover{color:var(--text);background:var(--surface)}
+.shell-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface)}
+#tabbar .spacer{flex:1}
+#tabbar .scan-pill{
+  display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;
+  padding:5px 11px;border-radius:20px;background:var(--surface);border:1px solid var(--border);
+  white-space:nowrap;color:var(--text);
+}
+#tabbar .scan-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+#tabbar .scan-pill.paused .dot{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+#tabbar .scan-pill.paused{color:var(--warn);border-color:var(--warn)}
+#themeToggle{
+  appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--text);
+  font-size:15px;width:32px;height:32px;border-radius:7px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+#themeToggle:hover{border-color:var(--accent)}
+#frames{flex:1;position:relative;background:var(--bg)}
+#frames iframe{
+  position:absolute;inset:0;width:100%;height:100%;border:none;
+  display:none;background:var(--bg);
+}
+#frames iframe.active{display:block}
+#updateBar{
+  display:none;align-items:center;gap:10px;
+  background:#1a3a1f;border-bottom:1px solid #2ea043;
+  padding:6px 16px;font-size:12px;color:#3fb950;flex-shrink:0;
+}
+#updateBar.ready{background:#1a3a1f;border-color:#2ea043;color:#3fb950}
+#updateBar.downloading{background:#2e2410;border-bottom:1px solid #d29922;color:#d29922}
+#updateBar button{
+  appearance:none;border:1px solid #2ea043;background:#238636;
+  color:#fff;font-size:11px;font-weight:700;padding:3px 10px;
+  border-radius:5px;cursor:pointer;margin-left:auto;white-space:nowrap;
+}
+#updateBar.downloading button{border-color:#d29922;background:#9a6700}
+</style>
+</head>
+<body>
+<div id="shell">
+  <div id="tabbar">
+    <span class="brand">🎰 LOTTERY</span>
+    <button class="shell-tab active" data-tab="home" onclick="switchShellTab('home')">🏠 Home</button>
+    <button class="shell-tab" data-tab="manager" onclick="switchShellTab('manager')">🎯 Manager</button>
+    <button class="shell-tab" data-tab="inventory" onclick="switchShellTab('inventory')">📦 Inventory</button>
+    <button class="shell-tab" data-tab="admin" onclick="switchShellTab('admin')">🎫 Admin</button>
+    <button class="shell-tab" data-tab="repository" onclick="switchShellTab('repository')">🗄 Repository</button>
+    <div class="spacer"></div>
+    <button id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+    <button class="shell-tab" style="border-bottom:none;background:var(--primary);color:#fff;border-radius:7px;height:32px;padding:0 14px" onclick="openDisplayWindow()">📺 Open Display</button>
+    <div class="scan-pill" id="shellScanPill"><span class="dot"></span><span id="shellScanText">Scanning active</span></div>
+  </div>
+  <div id="updateBar">
+    <span id="updateMsg">⬇ Update available</span>
+    <button id="updateBtn" onclick="handleUpdateBtn()">Restart &amp; Install</button>
+  </div>
+  <div id="frames">
+    <iframe id="frame-home" class="active" src="http://localhost:3000/lottery-home.html"></iframe>
+    <iframe id="frame-manager" src="http://localhost:3000/lottery-manager.html"></iframe>
+    <iframe id="frame-inventory" src="http://localhost:3000/lottery-admin.html#tab=inv"></iframe>
+    <iframe id="frame-admin" src="http://localhost:3000/lottery-admin.html#tab=db"></iframe>
+    <iframe id="frame-repository" src="http://localhost:3000/lottery-repository.html"></iframe>
+  </div>
+</div>
+
+<script>
+let activeTab='home';
+const THEME_KEY='lotteryApp_theme';
+
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme',theme);
+  document.getElementById('themeToggle').textContent = theme==='light' ? '☀️' : '🌙';
+}
+function loadTheme(){
+  return localStorage.getItem(THEME_KEY) || 'dark';
+}
+function toggleTheme(){
+  const current=loadTheme();
+  const next = current==='light' ? 'dark' : 'light';
+  localStorage.setItem(THEME_KEY, next);
+  localStorage.setItem('lotteryApp_updated', Date.now()+'');
+  applyTheme(next);
+  broadcastTheme(next);
+}
+function broadcastTheme(theme){
+  document.querySelectorAll('#frames iframe').forEach(f=>{
+    try{ if(f.contentWindow && f.contentWindow.applyExternalTheme) f.contentWindow.applyExternalTheme(theme); }catch(e){}
+  });
+}
+applyTheme(loadTheme());
+
+function openDisplayWindow(){
+  if(window.electronAPI && window.electronAPI.openDisplay){
+    window.electronAPI.openDisplay();
+  }
+}
+
+function switchShellTab(tab){
+  activeTab=tab;
+  document.querySelectorAll('.shell-tab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab===tab);
+  });
+  document.querySelectorAll('#frames iframe').forEach(f=>f.classList.remove('active'));
+  document.getElementById('frame-'+tab).classList.add('active');
+
+  // Tell the admin iframe which sub-view to show (db vs inventory)
+  if(tab==='admin'||tab==='inventory'){
+    const fr=document.getElementById('frame-'+tab);
+    try{
+      const sub = tab==='inventory' ? 'inv' : 'db';
+      if(fr.contentWindow && fr.contentWindow.switchTab){
+        fr.contentWindow.switchTab(sub);
+      }
+    }catch(e){}
+  }
+  // Re-apply theme in case the iframe just loaded for the first time
+  broadcastTheme(loadTheme());
+}
+
+// ── SCAN ROUTING ──────────────────────────────────────────
+// Global hook delivers barcodes here (the shell/top window).
+// Route per the active tab:
+//   - admin or inventory tab  → admin's handleBarcode (option A: add/find lottery)
+//   - anywhere else (manager) → manager's globalBarcode
+function routeBarcode(code){
+  code=String(code||'').trim();
+  const mgr=document.getElementById('frame-manager').contentWindow;
+  const adm=document.getElementById('frame-admin').contentWindow;
+
+  if(activeTab==='admin'||activeTab==='inventory'){
+    // Option A — admin handles the scan in its own way
+    try{
+      if(adm && adm.handleBarcode){ adm.handleBarcode(code.replace(/\s/g,'')); return; }
+    }catch(e){}
+  }
+  // Default — manager handles it
+  try{
+    if(mgr && mgr.handleHookBarcode){ mgr.handleHookBarcode(code); return; }
+    if(mgr && mgr.globalBarcode){ mgr.globalBarcode(code); return; }
+  }catch(e){}
+}
+
+if(window.electronAPI){
+  window.electronAPI.onBarcode(code=>routeBarcode(code));
+
+  window.electronAPI.onCaptureState(({paused})=>{
+    const pill=document.getElementById('shellScanPill');
+    const txt=document.getElementById('shellScanText');
+    pill.classList.toggle('paused',paused);
+    txt.textContent = paused ? 'Scanning PAUSED' : 'Scanning active';
+    // Also inform the manager frame so its own scan bar updates
+    try{
+      const mgr=document.getElementById('frame-manager').contentWindow;
+      if(mgr && mgr.onShellCaptureState) mgr.onShellCaptureState(paused);
+    }catch(e){}
+  });
+
+  window.electronAPI.getCaptureInfo().then(({paused})=>{
+    const pill=document.getElementById('shellScanPill');
+    const txt=document.getElementById('shellScanText');
+    pill.classList.toggle('paused',paused);
+    txt.textContent = paused ? 'Scanning PAUSED' : 'Scanning active';
+  });
+}
+
+// Let the manager frame request bringing the window to front (wrong-scan alert)
+window.addEventListener('message',ev=>{
+  if(ev.data==='lottery:bringToFront' && window.electronAPI){
+    window.electronAPI.bringToFront();
+  } else if(ev.data && ev.data.type==='lottery:setHotkey' && window.electronAPI){
+    window.electronAPI.setHotkey(ev.data.hotkey);
+  } else if(ev.data && ev.data.type==='lottery:switchTab'){
+    switchShellTab(ev.data.tab);
+  }
+});
+
+// Each iframe applies its own theme on load via applyExternalTheme,
+// but if it loads after the shell has already set a theme, give it a moment then push again.
+document.querySelectorAll('#frames iframe').forEach(f=>{
+  f.addEventListener('load',()=>{
+    try{ if(f.contentWindow && f.contentWindow.applyExternalTheme) f.contentWindow.applyExternalTheme(loadTheme()); }catch(e){}
+  });
+});
+// ── AUTO UPDATER ──────────────────────────────────────────
+let _updateDownloaded = false;
+
+function handleUpdateBtn(){
+  if(_updateDownloaded && window.electronAPI){
+    window.electronAPI.installUpdate();
+  }
+}
+
+if(window.electronAPI){
+  window.electronAPI.onUpdateAvailable(info=>{
+    const bar=document.getElementById('updateBar');
+    const msg=document.getElementById('updateMsg');
+    const btn=document.getElementById('updateBtn');
+    bar.classList.remove('ready');
+    bar.classList.add('downloading');
+    msg.textContent=`⬇ Downloading update v${info.version}…`;
+    btn.textContent='Downloading…';
+    btn.disabled=true;
+    bar.style.display='flex';
+  });
+
+  window.electronAPI.onUpdateDownloaded(info=>{
+    _updateDownloaded=true;
+    const bar=document.getElementById('updateBar');
+    const msg=document.getElementById('updateMsg');
+    const btn=document.getElementById('updateBtn');
+    bar.classList.remove('downloading');
+    bar.classList.add('ready');
+    msg.textContent=`✓ Update v${info.version} ready — restart to apply`;
+    btn.textContent='Restart & Install';
+    btn.disabled=false;
+    bar.style.display='flex';
+  });
+}
+</script>
+</body>
+</html>

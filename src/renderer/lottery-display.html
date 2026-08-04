@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lottery Display</title>
+<link href="https://fonts.googleapis.com/css2?family=Ultra&family=Chakra+Petch:wght@600;700&family=Montserrat:wght@500;700&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Teko:wght@500;600&family=Orbitron:wght@600;700&family=Exo+2:wght@600;700&family=Russo+One&family=Anton&family=Black+Han+Sans&family=Abril+Fatface&family=Righteous&family=Permanent+Marker&family=Bangers&family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* ── ANIMATED BACKGROUND ─────────────────────────────── */
+html,body{width:100%;height:100%;background:var(--display-bg,#050008);overflow:hidden;font-family:-apple-system,Arial,sans-serif}
+
+/* ── LAYOUT ──────────────────────────────────────────── */
+
+#appWrap{width:100vw;height:100vh;display:flex;flex-direction:column;position:relative;z-index:3}
+/* ── PORTRAIT MODE ───────────────────────────────────── */
+body.portrait.needs-rotation #appWrap{
+  width:100vh;height:100vw;
+  position:absolute;top:0;left:0;
+  transform:rotate(-90deg) translateX(-100%);
+  transform-origin:top left;
+}
+body.portrait #adOverlay{position:fixed;inset:0;transform:none;}
+#promoRow{
+  width:100%;background:rgba(0,0,0,.78);backdrop-filter:blur(12px);
+  border-top:3px solid rgba(245,197,0,.85);
+  display:flex;align-items:center;gap:20px;padding:0 28px;
+  overflow:hidden;flex-shrink:0;
+}
+#promoRow img{height:100%;max-width:260px;object-fit:contain;flex-shrink:0}
+#promoText{color:#fff;font-weight:900;line-height:1.1;text-shadow:0 2px 10px rgba(0,0,0,.8);flex:1;min-width:0}
+#promoText.sm{font-size:clamp(14px,2.2vw,22px)}
+#promoText.md{font-size:clamp(18px,3vw,34px)}
+#promoText.lg{font-size:clamp(22px,4vw,48px)}
+#promoText.xl{font-size:clamp(28px,5.5vw,72px)}
+
+#gridWrap{flex:1;overflow:hidden;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;}
+#featuredWrap{display:none;flex-direction:column;justify-content:center;gap:8px;flex-shrink:0;}
+#gridWrap.has-featured{align-items:stretch;}
+#gridWrap.has-featured #lotteryGrid{align-self:center;}
+body.portrait #gridWrap.has-featured{flex-direction:column;}
+.featured-cell{position:relative;border-radius:6px;padding:3px;flex-shrink:0;}
+.featured-cell .cell{position:absolute;inset:3px;overflow:hidden;border-radius:3px;background:#0e0e0e;}
+.featured-cell .cell-img{width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0;filter:brightness(var(--img-bright,1))}
+
+/* ── LOTTO BANNER ──────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap');
+#lottoWrap{
+  width:100%;flex-shrink:0;overflow:hidden;
+  border-bottom:3px solid #e5e7eb;
+  height:0;
+}
+#appWrap.lotto-left #lottoWrap{width:20vw;min-width:180px;max-width:260px;height:auto !important;border-bottom:none;border-right:3px solid #e5e7eb;align-self:stretch;}
+#appWrap.lotto-left{flex-direction:row}
+#appWrap.lotto-left{flex-direction:row}
+#lottoWrap.bottom{border-bottom:none;border-top:3px solid #e5e7eb;}
+#appWrap.lotto-left #gridWrap{flex:1}
+.lotto-grid{display:grid;font-family:var(--font-lotto-name,'Oswald',Impact,Arial,sans-serif)}
+#lottoWrap.top .lotto-grid{grid-template-columns:repeat(3,1fr);height:100%;align-items:stretch;overflow:hidden}
+#lottoWrap.left .lotto-grid{grid-template-columns:1fr;height:100%}
+.lotto-card{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(4px,1vh,10px) clamp(6px,1vw,14px);text-align:center;overflow:hidden;min-height:0}
+.lotto-card.pb{background:#d8d8d8}
+.lotto-card.mm{background:#d8d8d8}
+.lotto-card.lt{background:#d8d8d8}
+.lotto-card.tts{background:#d8d8d8}
+.lotto-card:not(:last-child).top-sep{border-right:1px solid #c0c0c0}
+.lotto-card:not(:last-child).left-sep{border-bottom:none}
+.lotto-logo{object-fit:contain;flex-shrink:0}
+.lotto-alert{font-weight:700;letter-spacing:2px;color:#cc8800;text-transform:uppercase;animation:lpulse 2s infinite}
+@keyframes lpulse{0%,100%{opacity:1}50%{opacity:.4}}
+.lotto-game-name{font-weight:600;letter-spacing:1.5px;text-transform:uppercase}
+.lotto-game-name.light{color:#222}
+.lotto-game-name.dark{color:#222}
+.lotto-est{font-weight:400;letter-spacing:1px;text-transform:uppercase;opacity:.75}
+.lotto-est.light{color:#888}
+.lotto-est.dark{color:#555}
+.lotto-amount{font-weight:700;line-height:1}
+.lotto-amount.light{color:#cc0000}
+.lotto-amount.gold{color:#003087}
+.lotto-amount.red{color:#b8860b}
+.lotto-amount.tts{color:#1a6b3c}
+.lotto-cash{font-weight:400;opacity:.8}
+.lotto-cash.light{color:#111}
+.lotto-cash.dark{color:#111;font-weight:700}
+.lotto-draw{font-weight:600;border-radius:20px}
+.lotto-draw.light{background:transparent;color:#111}
+.lotto-draw.dark{background:transparent;color:#111}
+#lotteryGrid{display:grid;box-sizing:border-box;}
+
+/* ── CELL WRAPPER (metallic border) ──────────────────── */
+.cell-wrap{
+  position:relative;border-radius:0;padding:var(--cell-pad,3px);
+  background:#333;
+  transition:filter .4s;
+  container-type:size;
+}
+/* Border overlay via _tierStyle (dynamic, reads from cfg) */
+.cell-wrap::after{
+  content:'';position:absolute;inset:0;border-radius:0;
+  pointer-events:none;z-index:30;
+}
+.cell-wrap:has(.cell.empty){background:rgba(80,0,80,0.25)}
+/* Subtle shimmer pulse — isolated to border via ::before overlay, image unaffected */
+@keyframes borderPulse{0%,100%{opacity:.55}50%{opacity:1}}
+.cell-wrap::before{
+  content:'';position:absolute;inset:0;border-radius:0;pointer-events:none;z-index:3;
+  animation:borderPulse 5s ease-in-out infinite;
+}
+.cell-wrap.platinum::before{
+  animation:borderPulse 3s ease-in-out infinite;
+}
+/* Spotlight animated border */
+@keyframes spotlightGlow{
+  0%,100%{outline:3px solid rgba(255,220,0,.7);outline-offset:0px;box-shadow:inset 0 0 0 2px rgba(255,220,0,.4)}
+  50%{outline:3px solid rgba(255,235,0,1);outline-offset:0px;box-shadow:inset 0 0 0 2px rgba(255,235,0,.7)}
+}
+.cell-wrap.spotlight-active{
+  animation:spotlightGlow 1.2s ease-in-out infinite !important;
+  z-index:10;
+}
+
+/* BRONZE ≤ $10 */
+.cell-wrap.bronze{
+  background:linear-gradient(135deg,
+    #7a3800 0%,#a05020 12%,#c06020 25%,#e09048 40%,
+    #f0b868 50%,#e09048 60%,#c06020 75%,#a05020 88%,#7a3800 100%);
+  box-shadow:0 0 10px rgba(192,96,32,.55),0 3px 8px rgba(0,0,0,.6);
+}
+/* SILVER >$10 ≤$50 */
+.cell-wrap.silver{
+  background:linear-gradient(135deg,
+    #484848 0%,#686868 12%,#989898 25%,#c8c8c8 40%,
+    #e8e8e8 50%,#c8c8c8 60%,#989898 75%,#686868 88%,#484848 100%);
+  box-shadow:0 0 10px rgba(160,160,160,.45),0 3px 8px rgba(0,0,0,.6);
+}
+/* GOLD >$50 ≤$100 */
+.cell-wrap.gold{
+  background:linear-gradient(135deg,
+    #7a5000 0%,#a07800 12%,#c89800 25%,#f0c800 40%,
+    #ffd700 50%,#f0c800 60%,#c89800 75%,#a07800 88%,#7a5000 100%);
+  box-shadow:0 0 14px rgba(255,210,0,.6),0 0 28px rgba(200,150,0,.25),0 3px 8px rgba(0,0,0,.6);
+}
+/* PLATINUM >$100 */
+.cell-wrap.platinum{
+  padding:4px;
+  background:linear-gradient(135deg,
+    #503400 0%,#7a5800 8%,#9e6e00 18%,#c89000 28%,
+    #e8b800 38%,#ffd700 50%,
+    #e8b800 62%,#c89000 72%,#9e6e00 82%,#7a5800 92%,#503400 100%);
+  box-shadow:
+    0 0 18px rgba(255,210,0,.75),
+    0 0 36px rgba(180,130,0,.4),
+    0 0 60px rgba(120,80,0,.2),
+    0 3px 10px rgba(0,0,0,.7);
+}
+/* Platinum ridges via ::before */
+.cell-wrap.platinum::before{
+  content:'';position:absolute;inset:0;border-radius:0;pointer-events:none;z-index:3;
+  background:repeating-linear-gradient(90deg,
+    transparent 0px,transparent 2px,
+    rgba(255,255,255,.1) 2px,rgba(255,255,255,.1) 3px,
+    transparent 3px,transparent 5px,
+    rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 6px
+  );
+}
+/* Platinum top ornament — injected via _tierStyle */
+
+/* ── INNER CELL ───────────────────────────────────────── */
+.cell{position:absolute;inset:var(--cell-pad,3px);overflow:hidden;border-radius:0;background:#0e0e0e}
+.cell.empty{background:rgba(10,0,20,0.45)}
+.cell-img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;position:absolute;inset:0;filter:brightness(var(--img-bright,1))}
+.cell-placeholder{
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;
+}
+.ph-icon{font-size:clamp(14px,2.2vw,26px);opacity:.18}
+.ph-num{font-size:clamp(9px,1.3vw,14px);color:#222;font-weight:700;font-family:'Ultra',Georgia,serif}
+
+/* ── SLOT BANNER (three corner labels) ── */
+.slot-banner{
+  position:absolute;inset:0;
+  z-index:25;pointer-events:none;
+}
+.ban-price,.ban-slot,.ban-ticket{
+  position:absolute;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  border-radius:2px;
+  padding:1px 3px;
+}
+/* Price — top-left, no label */
+.ban-price{
+  top:4%;left:3%;
+  background:rgba(255,255,255,.92);
+}
+/* Slot # — top-right */
+.ban-slot{
+  top:4%;right:3%;
+  background:rgba(255,255,255,.92);
+}
+/* Current — bottom-center */
+.ban-ticket{
+  bottom:3%;left:50%;transform:translateX(-50%);
+  background:rgba(255,255,255,.92);
+}
+.ban-tag{
+  font-family:var(--font-ban-tag,'Chakra Petch',sans-serif);
+  font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  line-height:1;margin-bottom:1px;white-space:nowrap;
+  color:rgba(0,0,0,.55);
+}
+.ban-num{
+  font-family:var(--font-ban-num,'Chakra Petch',sans-serif);
+  font-weight:700;line-height:1;white-space:nowrap;
+  color:#111;
+}
+.ban-price .ban-num{color:#111;font-weight:800;}
+.ban-slot .ban-num{color:#111;}
+.ban-ticket .ban-num{color:#111;}
+
+/* ── AD OVERLAY ───────────────────────────────────────────── */
+#adOverlay{position:fixed;inset:0;z-index:50;background:#000;display:none;overflow:hidden}
+#adOverlay.active{display:block}
+.ad-overlay-item{position:absolute}
+.ad-overlay-item img{width:100%;height:100%;object-fit:contain;display:block}
+
+#updateFlash{
+  position:fixed;top:10px;right:12px;
+  background:rgba(0,0,0,.85);border:1px solid #238636;
+  color:#3fb950;font-size:11px;font-weight:700;
+  padding:5px 13px;border-radius:7px;
+  opacity:0;transition:opacity .4s;pointer-events:none;z-index:999;
+}
+#updateFlash.show{opacity:1}
+#hint{position:fixed;bottom:6px;right:10px;font-size:10px;color:rgba(255,255,255,.12);pointer-events:none}
+
+/* ── PRIZE OVERLAY ───────────────────────────────────────── */
+.prize-overlay{
+  position:absolute;inset:3px;z-index:30;border-radius:3px;
+  background:rgba(0,0,0,.92);
+  display:flex;flex-direction:column;justify-content:center;
+  padding:6% 7%;gap:4%;
+}
+.prize-ov-title{
+  font-family:'Oswald',Impact,Arial,sans-serif;
+  font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:#f5c500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-size:clamp(7px,1.4cqw,14px);
+  line-height:1.1;flex-shrink:0;
+}
+.prize-ov-row{
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(255,255,255,.06);border-radius:3px;
+  padding:3% 5%;flex-shrink:0;
+}
+.prize-ov-amt{
+  font-family:'Oswald',Impact,Arial,sans-serif;
+  font-weight:700;color:#fbbf24;
+  font-size:clamp(7px,1.3cqw,13px);
+  line-height:1;
+}
+.prize-ov-pct{
+  font-family:'Oswald',Impact,Arial,sans-serif;
+  font-weight:700;
+  font-size:clamp(7px,1.3cqw,13px);
+  line-height:1;
+}
+.prize-ov-pct.low{color:#3fb950}
+.prize-ov-pct.mid{color:#d29922}
+.prize-ov-pct.high{color:#ef4444}
+</style>
+</head>
+<body>
+<div id="adOverlay"></div>
+<div id="appWrap">
+  <div id="headerWrap" style="width:100%;flex-shrink:0;background:#000;display:none"></div>
+  <div id="lottoWrap"></div>
+  <div id="gridWrap">
+    <div id="lotteryGrid"></div>
+    <div id="featuredWrap"></div>
+  </div>
+  <div id="promoRow" style="height:0"></div>
+</div>
+<div id="updateFlash">Display updated ✓</div>
+<div id="hint">F11 for fullscreen</div>
+
+<script>
+const SLOTS_KEY='lotteryApp_slots',PROMO_KEY='lotteryApp_promo',DCFG_KEY='lotteryApp_display_cfg';
+
+function loadSlots(){try{const r=localStorage.getItem(SLOTS_KEY);return r?JSON.parse(r):{version:1,slots:[]}}catch{return{version:1,slots:[]}}}
+function loadPromo(){try{const r=localStorage.getItem(PROMO_KEY);return r?JSON.parse(r):{enabled:false,image:null,text:'',textSize:'md'}}catch{return{enabled:false,image:null,text:'',textSize:'md'}}}
+function loadDisplayCfg(){
+  const def={brightness:80,saturation:85,contrast:90,bgDim:0,imgBright:100,bgColor:'#050008',portrait:false,spotlightEnabled:false,spotlightSlots:[],spotlightDuration:5,spotlightMode:'animated-border',spotlightSimultaneous:false,featuredEnabled:false,featuredSlots:[]};
+  try{const r=localStorage.getItem(DCFG_KEY);return r?{...def,...JSON.parse(r)}:def}catch{return def}
+}
+
+// Viewport helpers — swap dims only when rotation is active (landscape window in portrait mode)
+function vW(){return document.body.classList.contains('needs-rotation')?window.innerHeight:window.innerWidth;}
+function vH(){return document.body.classList.contains('needs-rotation')?window.innerWidth:window.innerHeight;}
+
+function applyDisplayCfg(){
+  const cfg=loadDisplayCfg();
+  // Portrait mode
+  const wantPortrait=!!cfg.portrait;
+  document.body.classList.toggle('portrait', wantPortrait);
+  // Only rotate if window is currently landscape (wider than tall)
+  // If window is already portrait, skip rotation — render portrait layout directly
+  const windowIsLandscape = window.innerWidth > window.innerHeight;
+  document.body.classList.toggle('needs-rotation', wantPortrait && windowIsLandscape);
+  document.documentElement.style.setProperty('--display-bg', cfg.bgColor||'#050008');
+  document.getElementById('appWrap').style.filter=
+    `brightness(${cfg.brightness/100}) saturate(${cfg.saturation/100}) contrast(${cfg.contrast/100})`;
+  document.documentElement.style.setProperty('--img-bright',(cfg.imgBright/100).toFixed(2));
+  // Slot tabs
+  document.documentElement.style.setProperty('--ticket-bg',cfg.ticketBg||'#3a1500');
+  document.documentElement.style.setProperty('--ticket-text',cfg.ticketText||'#f5c500');
+  document.documentElement.style.setProperty('--slot-bg',cfg.slotBg||'#e8a040');
+  document.documentElement.style.setProperty('--slot-text',cfg.slotText||'#1a0800');
+  // Borders — rebuild tier CSS
+  const bm=cfg.bronzeMax||10, sm=cfg.silverMax||50, gm=cfg.goldMax||100;
+  const bc=cfg.bronzeColor||'#c06020', sc=cfg.silverColor||'#989898';
+  const gc=cfg.goldColor||'#c89800', pc=cfg.platColor||'#c89000';
+  function mkGrad(mid){
+    const d=hexDarken(mid,0.55), l=hexLighten(mid,1.35);
+    return `linear-gradient(135deg,${d} 0%,${mid} 12%,${l} 25%,${hexLighten(mid,1.6)} 40%,${hexLighten(mid,1.75)} 50%,${hexLighten(mid,1.6)} 60%,${l} 75%,${mid} 88%,${d} 100%)`;
+  }
+  let styleEl=document.getElementById('_tierStyle');
+  if(!styleEl){styleEl=document.createElement('style');styleEl.id='_tierStyle';document.head.appendChild(styleEl);}
+  const showBorder=cfg.showBorder!==false;
+  // Dynamic cell padding: 3px for border frame, 1px for separator sliver only
+  document.documentElement.style.setProperty('--cell-pad', showBorder?'3px':'0px');
+  if(showBorder){
+    styleEl.textContent=`
+      .cell-wrap.bronze{background:${mkGrad(bc)};box-shadow:0 0 10px ${bc}88,0 3px 8px rgba(0,0,0,.6)}
+      .cell-wrap.silver{background:${mkGrad(sc)};box-shadow:0 0 10px ${sc}72,0 3px 8px rgba(0,0,0,.6)}
+      .cell-wrap.gold{background:${mkGrad(gc)};box-shadow:0 0 14px ${gc}99,0 0 28px ${gc}40,0 3px 8px rgba(0,0,0,.6)}
+      .cell-wrap.platinum{background:${mkGrad(pc)};box-shadow:0 0 18px ${pc}be,0 0 36px ${pc}66,0 3px 10px rgba(0,0,0,.7)}
+      .cell-wrap.bronze::after{box-shadow:inset 0 0 0 3px ${bc}}
+      .cell-wrap.silver::after{box-shadow:inset 0 0 0 3px ${sc}}
+      .cell-wrap.gold::after{box-shadow:inset 0 0 0 3px ${gc}}
+      .cell-wrap.platinum::after{content:'❖';position:absolute;top:-1px;left:50%;transform:translateX(-50%);color:rgba(255,225,80,.95);font-size:clamp(7px,.9vw,11px);z-index:34;text-shadow:0 0 6px rgba(255,215,0,1),0 0 12px rgba(255,180,0,.7);pointer-events:none;line-height:1;box-shadow:inset 0 0 0 3px ${pc}}
+    `;
+  } else {
+    styleEl.textContent=`
+      .cell-wrap.bronze,.cell-wrap.silver,.cell-wrap.gold,.cell-wrap.platinum{background:#111;box-shadow:none}
+      .cell-wrap::after{display:none}
+      .cell-wrap::before{display:none}
+    `;
+  }
+  // Fonts
+  const fBanNum=cfg.fontBanNum||'Chakra Petch';
+  const fBanTag=cfg.fontBanTag||'Chakra Petch';
+  const fLottoAmt=cfg.fontLottoAmt||'Oswald';
+  const fLottoName=cfg.fontLottoName||'Oswald';
+  const fLottoDraw=cfg.fontLottoDraw||'Montserrat';
+  document.documentElement.style.setProperty('--font-ban-num',`'${fBanNum}',sans-serif`);
+  document.documentElement.style.setProperty('--font-ban-tag',`'${fBanTag}',sans-serif`);
+  document.documentElement.style.setProperty('--font-lotto-amt',`'${fLottoAmt}',sans-serif`);
+  document.documentElement.style.setProperty('--font-lotto-name',`'${fLottoName}',sans-serif`);
+  document.documentElement.style.setProperty('--font-lotto-draw',`'${fLottoDraw}',sans-serif`);
+  // Load fonts dynamically
+  const allFonts=[fBanNum,fBanTag,fLottoAmt,fLottoName,fLottoDraw]
+    .filter((v,i,a)=>a.indexOf(v)===i&&!['Arial','Impact'].includes(v));
+  const fLink=document.getElementById('_dynFonts');
+  const fUrl='https://fonts.googleapis.com/css2?'+allFonts.map(f=>'family='+f.replace(/ /g,'+')+':wght@400;600;700').join('&')+'&display=swap';
+  if(!fLink){const l=document.createElement('link');l.id='_dynFonts';l.rel='stylesheet';l.href=fUrl;document.head.appendChild(l);}
+  else{fLink.href=fUrl;}
+}
+function hexDarken(hex,f){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`;
+}
+function hexLighten(hex,f){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.min(255,Math.round(r*f))},${Math.min(255,Math.round(g*f))},${Math.min(255,Math.round(b*f))})`;
+}
+
+let slotsData=loadSlots(), promoData=loadPromo();
+
+// ── PRICE → TIER ──────────────────────────────────────────
+function parsePriceNum(p){
+  if(!p) return 0;
+  return parseFloat(String(p).replace(/[^0-9.]/g,''))||0;
+}
+function getTier(p){
+  const n=parsePriceNum(p);
+  if(n<=0) return 'no-tier';
+  const cfg=loadDisplayCfg();
+  const bm=cfg.bronzeMax||10, sm=cfg.silverMax||50, gm=cfg.goldMax||100;
+  if(n<=bm) return 'bronze';
+  if(n<=sm) return 'silver';
+  if(n<=gm) return 'gold';
+  return 'platinum';
+}
+
+// ── SQUARE GRID LAYOUT ────────────────────────────────────
+function calcSquareLayout(count,availW,availH,gap){
+  if(count===0) return {cols:1,cellSize:Math.min(availW,availH)};
+  let bestCols=1,bestSize=0;
+  for(let cols=1;cols<=count;cols++){
+    const rows=Math.ceil(count/cols);
+    const cellW=Math.floor((availW-(cols-1)*gap)/cols);
+    const cellH=Math.floor((availH-(rows-1)*gap)/rows);
+    const size=Math.min(cellW,cellH);
+    if(size>bestSize){bestSize=size;bestCols=cols;}
+  }
+  return {cols:bestCols,cellSize:Math.max(40,bestSize)};
+}
+
+// Vertical: derive gapY from leftover space after fitting cells
+// Horizontal: fixed gapX=0.1px, cells shrink to accommodate
+function calcUniformLayout(count, W, H){
+  if(count===0) return {cols:1,rows:1,cellSize:Math.min(W,H),gapX:2,gapY:0};
+  const gapX=2;
+  // Step 1: pick cols ignoring gap — maximise cell size
+  let bestCols=1, bestCell=0;
+  for(let cols=1; cols<=count; cols++){
+    const rows=Math.ceil(count/cols);
+    const cell=Math.min(W/cols, H/rows);
+    if(cell>bestCell){bestCell=cell; bestCols=cols;}
+  }
+  const bestRows=Math.ceil(count/bestCols);
+  // Step 2: shrink cell slightly to fit gapX with same col count
+  const cellSize=Math.floor((W-(bestCols+1)*gapX)/bestCols);
+  // Step 3: gapY from leftover vertical space
+  const gapY=(H-bestRows*cellSize)/(bestRows+1);
+  return {cols:bestCols,rows:bestRows,cellSize:Math.max(20,cellSize),gapX,gapY};
+}
+
+// ── PROMO ─────────────────────────────────────────────────
+async function renderPromo(){
+  const row=document.getElementById('promoRow');
+  const lottoWrap=document.getElementById('lottoWrap');
+  const headerWrap=document.getElementById('headerWrap');
+  const appWrap=document.getElementById('appWrap');
+
+  // Header banner
+  if(promoData.headerEnabled){
+    const pct=(promoData.headerHeightPct||8)/100;
+    const hh=Math.round(window.innerHeight*pct);
+    headerWrap.style.display='flex';
+    headerWrap.style.alignItems='center';
+    headerWrap.style.height=hh+'px';
+    headerWrap.style.background=promoData.headerBg||'#000000';
+    headerWrap.style.borderBottom='2px solid #222';
+    // Build header: logo sized to its own content + promos sharing remaining space,
+    // each promo weighted by its natural aspect ratio so wide/narrow banners
+    // all render at a consistent visual height instead of being squeezed equally.
+    // Resolve idb: stubs to actual dataUrls from IndexedDB
+    const rawPromos=(promoData.headerPromos||[]).filter(p=>p);
+    const promos=await Promise.all(rawPromos.map(async stub=>{
+      if(stub&&stub.startsWith('idb:')){
+        try{
+          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',1);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+          const key=stub.slice(4);
+          return await new Promise((res,rej)=>{const tx=idb.transaction('images','readonly');const r=tx.objectStore('images').get(key);r.onsuccess=()=>res(r.result||stub);r.onerror=rej;});
+        }catch{return stub;}
+      }
+      return stub;
+    }));
+    let promoHtml='';
+    if(promos.length>0){
+      // Load each image's natural aspect ratio so it can size itself
+      // proportionally at the fixed header height, rather than being
+      // squeezed into an equal flex-width slot.
+      const dims=await Promise.all(promos.map(src=>new Promise(res=>{
+        const im=new Image();
+        im.onload=()=>res(im.naturalWidth&&im.naturalHeight?im.naturalWidth/im.naturalHeight:2);
+        im.onerror=()=>res(2);
+        im.src=src;
+      })));
+      promos.forEach((src,i)=>{
+        const ratio=dims[i]||2;
+        promoHtml+=`<div style="flex:${ratio} 1 0;height:100%;min-width:0;overflow:hidden;background:${promoData.headerBg||'#000'};display:flex;align-items:center;justify-content:center"><img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block"></div>`;
+      });
+    }
+    headerWrap.innerHTML=`
+      <div style="height:100%;flex-shrink:0;display:flex;align-items:stretch;justify-content:flex-start;padding:0">
+        <svg viewBox="0 0 230 242" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block">
+          <path d="M115,4 L211,100 L184,127 L195,127 L195,158 L167,158 L115,210 L63,158 L35,158 L35,127 L46,127 L19,100 Z"
+            fill="#CC1111" stroke="#CC1111" stroke-width="2" stroke-linejoin="miter"/>
+          <path d="M115,12 L203,100 L178,125 L188,125 L188,154 L165,154 L115,202 L65,154 L42,154 L42,125 L52,125 L27,100 Z"
+            fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="miter"/>
+          <text x="115" y="98" font-family="Impact,sans-serif" font-size="54" fill="#CC1111" text-anchor="middle" font-weight="900" dominant-baseline="middle">BIG D</text>
+          <text x="115" y="140" font-family="Verdana,sans-serif" font-size="16" fill="#1a5c2a" text-anchor="middle" font-weight="700" letter-spacing="2" dominant-baseline="middle">FOODMART</text>
+          <rect x="110" y="162" width="10" height="14" rx="1" fill="#CC1111"/>
+          <rect x="111" y="164" width="8" height="5" rx="1" fill="#fff"/>
+          <rect x="108" y="174" width="14" height="3" rx="1" fill="#CC1111"/>
+          <line x1="120" y1="167" x2="124" y2="167" stroke="#CC1111" stroke-width="1.5"/>
+          <line x1="124" y1="167" x2="124" y2="172" stroke="#CC1111" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div style="flex:1;height:100%;display:flex;align-items:stretch;min-width:0">${promoHtml}</div>`;
+    // Force layout to commit before grid measures gridWrap height
+    headerWrap.getBoundingClientRect();
+  } else {
+    headerWrap.style.display='none';
+    headerWrap.style.height='0';
+  }
+
+  // If lotto mode is on, lotto takes priority over banner
+  if(promoData.lottoEnabled && promoData.lottoData && promoData.lottoData.length){
+    row.style.height='0';
+    appWrap.className='';
+    lottoWrap.className='';
+    const lpos=promoData.lottoPosition||'top';
+    if(lpos==='bottom'){
+      appWrap.appendChild(lottoWrap);
+    } else {
+      appWrap.insertBefore(lottoWrap, appWrap.firstChild);
+    }
+    renderLottoBanner(lottoWrap, appWrap);
+    startLottoBannerRotation(lottoWrap, appWrap);
+    return;
+  }
+
+  // Normal banner — reset lotto wrap
+  if(lottoBannerTimer){clearInterval(lottoBannerTimer);lottoBannerTimer=null;}
+  lottoWrap.style.height='0';
+  lottoWrap.className='';
+  appWrap.className='';
+  if(!promoData.enabled){row.style.height='0';return;}
+  const ph=Math.max(72,Math.round(vH()*0.115));
+  row.style.height=ph+'px';
+  // Position: move promoRow before or after gridWrap
+  const pos=promoData.promoPosition||'bottom';
+  if(pos==='top'){
+    appWrap.insertBefore(row, appWrap.firstChild);
+    row.style.borderBottom='3px solid rgba(245,197,0,.85)';
+    row.style.borderTop='none';
+  } else {
+    appWrap.appendChild(row);
+    row.style.borderTop='3px solid rgba(245,197,0,.85)';
+    row.style.borderBottom='none';
+  }
+  row.innerHTML='';
+  if(promoData.image){
+    const img=document.createElement('img');
+    img.src=promoData.image;img.alt='Promo';
+    img.onerror=()=>img.remove();
+    row.appendChild(img);
+  }
+  if(promoData.text){
+    const txt=document.createElement('div');
+    txt.id='promoText';txt.className=promoData.textSize||'md';
+    txt.textContent=promoData.text;
+    row.appendChild(txt);
+  }
+}
+
+function formatJackpot(val){
+  if(!val||val==='—') return '—';
+  val=String(val).trim();
+  let num,suffix;
+  if(val.toLowerCase().includes('billion')){suffix='B';num='$'+val.replace(/billion/i,'').replace(/[^0-9.]/g,'').trim();}
+  else if(val.toLowerCase().includes('million')){suffix='M';num='$'+val.replace(/million/i,'').replace(/[^0-9.]/g,'').trim();}
+  else{
+    const n=parseInt(val.replace(/[^0-9]/g,''));
+    if(n>=1000000000){suffix='B';num='$'+(n/1000000000).toFixed(1);}
+    else if(n>=1000000){suffix='M';num='$'+Math.round(n/1000000);}
+    else return '$'+n.toLocaleString();
+  }
+  return num+suffix;
+}
+
+let lottoBannerRotIdx=0;
+let lottoBannerTimer=null;
+function startLottoBannerRotation(wrap, appWrap){
+  if(lottoBannerTimer) clearInterval(lottoBannerTimer);
+  lottoBannerTimer=setInterval(()=>{
+    if(!promoData.lottoEnabled){clearInterval(lottoBannerTimer);lottoBannerTimer=null;return;}
+    const games=promoData.lottoData||[];
+    const rotatingGames=['Texas Two Step','Cash Five','All or Nothing'];
+    const available=rotatingGames.filter(n=>games.find(g=>g.name===n&&g.jackpot));
+    if(available.length>=1){
+      lottoBannerRotIdx=(lottoBannerRotIdx+1)%available.length;
+      renderLottoBanner(wrap,appWrap); // only re-renders banner, not grid
+    }
+  },6000);
+}
+function renderLottoBanner(wrap, appWrap){
+  const isPortrait=document.body.classList.contains('portrait');
+  if(isPortrait){ renderLottoBannerPortrait(wrap, appWrap); return; }
+
+  const pos=promoData.lottoPosition||'top';
+  const games=promoData.lottoData||[];
+  const fixedGames=['Powerball','Mega Millions','Lotto Texas'];
+  const rotatingGames=['Texas Two Step','Cash Five','All or Nothing'];
+  const availableRot=rotatingGames.filter(n=>games.find(g=>g.name===n&&g.jackpot));
+  const rotIdx=availableRot.length>0?lottoBannerRotIdx%availableRot.length:0;
+  const rotGame=availableRot[rotIdx]||rotatingGames[0];
+  const allTargets=[...fixedGames, rotGame];
+  const targets=allTargets.filter(n=>games.find(g=>g.name===n&&g.jackpot));
+  const gameMap={
+    'Powerball':{cls:'pb',nameCls:'light',estCls:'light',amtCls:'light',cashCls:'light',drawCls:'light',sep:'top-sep'},
+    'Mega Millions':{cls:'mm',nameCls:'light',estCls:'light',amtCls:'gold',cashCls:'light',drawCls:'light',sep:'top-sep'},
+    'Lotto Texas':{cls:'lt',nameCls:'dark',estCls:'dark',amtCls:'red',cashCls:'dark',drawCls:'dark',sep:'top-sep'},
+    'Texas Two Step':{cls:'tts',nameCls:'dark',estCls:'dark',amtCls:'tts',cashCls:'dark',drawCls:'dark',sep:'top-sep'},
+    'Cash Five':{cls:'tts',nameCls:'dark',estCls:'dark',amtCls:'tts',cashCls:'dark',drawCls:'dark',sep:'top-sep'},
+    'All or Nothing':{cls:'tts',nameCls:'dark',estCls:'dark',amtCls:'tts',cashCls:'dark',drawCls:'dark',sep:'top-sep'},
+  };
+
+  const isTop=pos==='top';
+  const isBottom=pos==='bottom';
+  appWrap.className='';
+  wrap.className=isTop?'top':'bottom';
+
+  const vw=vW(), vh=vH();
+  const pct=(promoData.lottoBannerPct||16)/100;
+  const bh=Math.max(72,Math.round(vh*pct));
+  const logoH=(isTop||isBottom)?Math.round(bh*0.65):Math.round(vh*0.06);
+  const amtSize=(isTop||isBottom)?Math.round(Math.min(bh*0.22,vw*0.025)):Math.round(vh*0.045);
+  const nameSize=(isTop||isBottom)?Math.round(bh*0.08):Math.round(vh*0.013);
+  const estSize=Math.round(bh*0.065);
+  const cashSize=Math.round(bh*0.075);
+  const drawSize=(isTop||isBottom)?Math.round(bh*0.09):Math.round(vh*0.015);
+  const alertSize=Math.round(bh*0.055);
+  const pad=(isTop||isBottom)?Math.round(bh*0.08):Math.round(vh*0.01);
+
+  const numGames=targets.length||1;
+  if(isTop||isBottom){ wrap.style.height=bh+'px'; wrap.style.width=''; }
+  else { wrap.style.height=''; }
+
+  const cards=targets.map(name=>{
+    const g=games.find(x=>x.name===name);
+    const m=gameMap[name];
+    const jackpot=g?.jackpot||'—';
+    const nextDraw=g?.nextDraw||'—';
+    const cashVal=g?.cashValue||null;
+    const isFixed=['Cash Five','All or Nothing'].includes(name);
+    const isAlert=!isFixed&&g&&jackpot&&parseInt(jackpot.replace(/[^0-9]/g,''))>200;
+    const alertHtml=`<div class="lotto-alert" style="font-size:${alertSize}px;margin-bottom:${pad*0.3}px;visibility:${isAlert?'visible':'hidden'}">★ Jackpot Alert ★</div>`;
+    const prizeLabel=isFixed?'Top Prize':'Est. Jackpot';
+    const sepCls=(isTop||isBottom)?'top-sep':'left-sep';
+    return `<div class="lotto-card ${m.cls} ${sepCls}" style="flex-direction:row;align-items:center;justify-content:center;padding:${Math.round(bh*0.05)}px ${pad}px;gap:${pad}px">
+      <img class="lotto-logo" src="https://www.texaslottery.com/export/sites/lottery/Images/latest_results/${name.toLowerCase().replace(/ /g,'_')}.png"
+        style="height:${logoH}px;width:${logoH*1.4}px;object-fit:contain;flex-shrink:0;"
+        onerror="this.style.display='none'">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;justify-content:center">
+        ${alertHtml}
+        <div class="lotto-est ${m.estCls}" style="font-size:${estSize}px;margin-bottom:2px;letter-spacing:1px;text-transform:uppercase;opacity:0.75">${prizeLabel}</div>
+        <div class="lotto-amount ${m.amtCls}" style="font-size:${amtSize}px;line-height:1;letter-spacing:2px">${formatJackpot(jackpot)}</div>
+        <div class="lotto-draw ${m.drawCls}" style="font-size:${drawSize}px;letter-spacing:0.5px;font-weight:700;color:#111;font-family:var(--font-lotto-draw,'Montserrat',sans-serif);text-shadow:none">Next draw ${nextDraw||'—'}</div>
+        ${cashVal?`<div class="lotto-cash ${m.cashCls}" style="font-size:${cashSize}px;letter-spacing:0.5px;font-weight:700;color:#444;font-family:var(--font-lotto-draw,'Montserrat',sans-serif);text-shadow:none">Cash value $${g.cashValue}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML=`<div class="lotto-grid" style="${(isTop||isBottom)?'grid-template-columns:repeat('+numGames+',1fr);height:'+bh+'px':'height:100%'}">${cards}</div>`;
+}
+
+function renderLottoBannerPortrait(wrap, appWrap){
+  const pos=promoData.lottoPosition||'top';
+  const games=promoData.lottoData||[];
+  const rotatingGames=['Texas Two Step','Cash Five','All or Nothing'];
+  const availableRot=rotatingGames.filter(n=>games.find(g=>g.name===n&&g.jackpot));
+  const rotIdx=availableRot.length>0?lottoBannerRotIdx%availableRot.length:0;
+  const rotGame=availableRot[rotIdx]||null;
+
+  // 2x2: TL=Powerball, TR=Mega Millions, BL=Lotto Texas, BR=rotating
+  const slots=[
+    {name:'Powerball',    cls:'pb', amtCls:'light', amtColor:'#cc0000'},
+    {name:'Mega Millions',cls:'mm', amtCls:'gold',  amtColor:'#003087'},
+    {name:'Lotto Texas',  cls:'lt', amtCls:'red',   amtColor:'#b8860b'},
+    {name:rotGame,        cls:'tts',amtCls:'tts',   amtColor:'#1a6b3c'},
+  ];
+
+  const isTop=pos==='top'||pos==='bottom';
+  appWrap.className=isTop?'':'lotto-left';
+  wrap.className=isTop?'top':'left';
+
+  const vw=vW(), vh=vH();
+  const pct=(promoData.lottoBannerPct||16)/100;
+  const bh=Math.max(80,Math.round(vh*pct));
+
+  if(isTop){ wrap.style.height=bh+'px'; wrap.style.width=''; }
+  else { wrap.style.height=''; }
+
+  // Each cell: half of total banner height, half of logical width
+  // DOM dimensions per cell: cDomW x cDomH
+  // After -90deg rotation, visually: cDomH wide x cDomW tall
+  // We want cells visually wider than tall, so:
+  //   cDomH = bh/2 (visual width, ~94px)
+  //   cDomW = vw/2 (visual height, ~472px) -- but vw here is lottoWrap DOM width = 945px
+  const cDomH=Math.floor(bh/2);   // visual width after rotation (~94px)
+  const cDomW=Math.floor(vw/2);   // visual height after rotation (~472px)
+  const visW=cDomH;  // visual width of each cell (~94px)
+  const visH=cDomW;  // visual height of each cell (~472px)
+  // Logo box: ~38% of visual height wide, full visual width tall (constrained)
+  const logoBoxW=Math.round(visH*0.28);
+  const logoBoxH=visW;
+  const logoH=Math.round(visW*0.72);
+  const logoW=Math.round(logoBoxW*0.85);
+  const pad=Math.max(3,Math.round(visW*0.06));
+  const amtSize=Math.max(9,Math.round(visW*0.20));
+  const estSize=Math.max(7,Math.round(visW*0.12));
+  const drawSize=Math.max(7,Math.round(visW*0.12));
+  const alertSize=Math.max(6,Math.round(visW*0.10));
+
+  const cards=slots.map((slot,i)=>{
+    const name=slot.name;
+    if(!name) return `<div style="height:${cellH}px;background:#1a1a2e;box-sizing:border-box;${i%2===0?'border-right:1px solid rgba(0,0,0,.2)':''}"></div>`;
+    const g=games.find(x=>x.name===name);
+    const jackpot=g?.jackpot||'—';
+    const nextDraw=g?.nextDraw||'—';
+    const isFixed=['Cash Five','All or Nothing'].includes(name);
+    const isAlert=!isFixed&&g&&jackpot&&parseInt(jackpot.replace(/[^0-9]/g,''))>200;
+    const prizeLabel=isFixed?'Top Prize':'Est. Jackpot';
+    const borderB=i<2?'border-bottom:1px solid rgba(0,0,0,.2);':'';
+    const borderR=i%2===0?'border-right:1px solid rgba(0,0,0,.2);':'';
+    const bgColors={'pb':'#d8d8d8','mm':'#d8d8d8','lt':'#d8d8d8','tts':'#d8d8d8'};
+    const bg=bgColors[slot.cls]||'#d8d8d8';
+    // Cell DOM: cDomW wide x cDomH tall = visually cDomH wide x cDomW tall after rotation
+    // Content: centered group of [logo | text] using flex-direction:row
+    return `<div style="width:${cDomW}px;height:${cDomH}px;display:flex;flex-direction:row;align-items:center;justify-content:center;padding:0;overflow:hidden;box-sizing:border-box;background:${bg};${borderB}${borderR}">
+      <div style="width:${logoBoxW}px;min-width:${logoBoxW}px;height:${cDomH}px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-sizing:border-box;">
+        <img src="https://www.texaslottery.com/export/sites/lottery/Images/latest_results/${name.toLowerCase().replace(/ /g,'_')}.png"
+          style="max-height:${logoH}px;max-width:${logoW}px;height:auto;width:auto;object-fit:contain;display:block;"
+          onerror="this.style.visibility='hidden'">
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;justify-content:center;overflow:hidden;gap:1px;padding:${pad}px ${pad}px ${pad}px 0;box-sizing:border-box;">
+        ${isAlert?`<div style="font-size:${alertSize}px;font-weight:700;color:#cc8800;letter-spacing:0.5px;white-space:nowrap">★ Jackpot Alert ★</div>`:''}
+        <div style="font-size:${estSize}px;color:#555;letter-spacing:0.5px;text-transform:uppercase;font-family:var(--font-lotto-name,'Oswald',sans-serif);white-space:nowrap;">${prizeLabel}</div>
+        <div style="font-size:${amtSize}px;line-height:1;font-weight:800;font-family:var(--font-lotto-amt,'Oswald',sans-serif);white-space:nowrap;color:${slot.amtColor}">${formatJackpot(jackpot)}</div>
+        <div style="font-size:${drawSize}px;font-weight:600;color:#333;font-family:var(--font-lotto-draw,'Montserrat',sans-serif);white-space:nowrap;">${nextDraw}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML=`<div style="display:grid;grid-template-columns:${cDomW}px ${cDomW}px;grid-template-rows:${cDomH}px ${cDomH}px;width:100%;height:${bh}px;overflow:hidden">${cards}</div>`;
+}
+
+// ── GRID ──────────────────────────────────────────────────
+function renderGrid(){
+  const grid=document.getElementById('lotteryGrid');
+  const gridWrap=document.getElementById('gridWrap');
+  // Force reflow so header/lotto banner heights are committed before we measure
+  void gridWrap.getBoundingClientRect();
+  const W=gridWrap.clientWidth;
+  const H=gridWrap.clientHeight;
+
+  const slots=[...slotsData.slots].sort((a,b)=>a.slotNumber-b.slotNumber);
+  const count=slots.length;
+
+  if(count===0){
+    grid.style.cssText='';
+    grid.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,.25);font-size:16px;font-weight:700">No slots — open Lottery Manager to add slots</div>';
+    return;
+  }
+
+  const _dcfgSp=loadDisplayCfg();
+  const spotEnabled=_dcfgSp.spotlightEnabled&&(_dcfgSp.spotlightSlots||[]).length>0;
+  const spotSimultaneous=spotEnabled&&!!_dcfgSp.spotlightSimultaneous;
+  const spotActiveSet=spotSimultaneous
+    ? new Set(_dcfgSp.spotlightSlots||[])
+    : (spotEnabled&&_spotCurrentSlot!=null ? new Set([_spotCurrentSlot]) : new Set());
+
+  const featEnabled=_dcfgSp.featuredEnabled&&(_dcfgSp.featuredSlots||[]).length>=3;
+  const featuredWrap=document.getElementById('featuredWrap');
+  gridWrap.classList.toggle('has-featured',featEnabled);
+  const isPortrait=document.body.classList.contains('portrait');
+
+  const {cols, rows, cellSize, gapX, gapY} = calcUniformLayout(count, W, H);
+
+  gridWrap.style.padding='0';
+  grid.style.display='grid';
+  grid.style.gridTemplateColumns=`repeat(${cols},${cellSize}px)`;
+  grid.style.gridTemplateRows=`repeat(${rows},${cellSize}px)`;
+  grid.style.gridAutoRows=`${cellSize}px`;
+  grid.style.gridAutoFlow='row';
+  grid.style.columnGap=gapX+'px';
+  grid.style.rowGap=gapY+'px';
+  grid.style.padding='0';
+  grid.style.width=(cols*cellSize+(cols-1)*gapX)+'px';
+  grid.style.height=(rows*cellSize+(rows-1)*gapY)+'px';
+  grid.style.boxSizing='content-box';
+  grid.style.justifyContent='';
+  grid.style.alignContent='';
+
+  // Banner sizing derived from square cell size
+  const banBig=Math.max(9,Math.min(18,Math.round(cellSize*0.10)));
+  const banSmall=Math.max(8,Math.min(15,Math.round(banBig*0.83)));
+  const banTag=Math.max(6,Math.min(9,Math.round(banBig*0.50)));
+  const banH=Math.max(20,Math.round(banBig*1.9));
+  const banGap=Math.max(10,Math.round(banBig*1.1));
+  const banPx=Math.max(8,Math.round(banBig*0.9));
+  const banInnerGap=Math.max(3,Math.round(banBig*0.33));
+  grid.style.setProperty('--ban-h',banH+'px');
+  grid.style.setProperty('--ban-big',banBig+'px');
+  grid.style.setProperty('--ban-small',banSmall+'px');
+  grid.style.setProperty('--ban-tag',banTag+'px');
+  grid.style.setProperty('--ban-gap',banGap+'px');
+  grid.style.setProperty('--ban-px',banPx+'px');
+  grid.style.setProperty('--ban-inner-gap',banInnerGap+'px');
+  // Sold-out overlay sizing — scale with cell
+  const soFont=Math.max(8,Math.min(28,Math.round(cellSize*0.14)));
+  const soGap=Math.max(3,Math.round(cellSize*0.03));
+  const soLine=Math.max(1,Math.round(cellSize*0.008));
+  grid.style.setProperty('--so-font',soFont+'px');
+  grid.style.setProperty('--so-gap',soGap+'px');
+  grid.style.setProperty('--so-line',soLine+'px');
+
+  grid.innerHTML='';
+
+  // Center last row with spacers
+  const lastRowCount = count % cols;
+  const spacersBefore = lastRowCount !== 0 ? Math.floor((cols - lastRowCount) / 2) : 0;
+  const spacersAfter  = lastRowCount !== 0 ? (cols - lastRowCount - spacersBefore) : 0;
+  const spacerTriggerIdx = count - lastRowCount;
+  const mkSpacer=()=>{const s=document.createElement('div');s.style.cssText=`width:${cellSize}px;height:${cellSize}px;visibility:hidden;pointer-events:none`;return s;};
+
+  slots.forEach((slot, idx)=>{
+    if(lastRowCount !== 0 && idx === spacerTriggerIdx){
+      for(let s=0;s<spacersBefore;s++) grid.appendChild(mkSpacer());
+    }
+    const isSpotlight = spotActiveSet.has(slot.slotNumber);
+    const tier=getTier(slot._price);
+
+    // Outer wrapper = metallic border
+    const wrap=document.createElement('div');
+    wrap.className='cell-wrap '+tier+(isSpotlight?' spotlight-active':'');
+    wrap.style.width=cellSize+'px';
+    wrap.style.height=cellSize+'px';
+
+    // Self-contained sold-out detection:
+    // Treat as sold out if the manager already flagged it OR if we can compute
+    // it directly (currentTicket exceeds totalTickets). The computed check
+    // catches cases where the flag wasn't written yet (e.g. manager tab closed).
+    const total=slot.totalTickets&&slot.totalTickets>0?slot.totalTickets:null;
+    const isSoldOut=slot.isFinished===true||(total!==null&&(slot.currentTicket||1)>total);
+
+    // Inner cell = image area
+    const cell=document.createElement('div');
+    // Sold-out slots display as empty on TV
+    const showAsEmpty=isSoldOut||!slot._image;
+    cell.className='cell'+(showAsEmpty?' empty':'');
+
+    if(!isSoldOut){
+      if(slot._image){
+        const imgEl=document.createElement('img');
+        imgEl.className='cell-img';
+        imgEl.src=slot._image;imgEl.alt=slot._name||'';
+        imgEl.onerror=()=>{imgEl.remove();showPh(cell,slot.slotNumber);};
+        cell.appendChild(imgEl);
+      } else {
+        showPh(cell,slot.slotNumber);
+      }
+    } else {
+      showPh(cell,slot.slotNumber);
+    }
+
+    wrap.appendChild(cell);
+
+    // Banner — price top-left, slot# top-right, current bottom-center
+    const price=slot._price||'';
+    const tagSz=Math.max(5,Math.round(cellSize*0.065))+'px';
+    const numSz=Math.max(7,Math.round(cellSize*0.11))+'px';
+    const ban=document.createElement('div');
+    ban.className='slot-banner';
+    if(isSoldOut){
+      ban.innerHTML=
+        (price?`<div class="ban-price"><span class="ban-num" style="font-size:${numSz}">${price}</span></div>`:'')+
+        `<div class="ban-slot"><span class="ban-tag" style="font-size:${tagSz}">SLOT #</span><span class="ban-num" style="font-size:${numSz}">${slot.slotNumber}</span></div>`+
+        `<div class="ban-ticket"><span class="ban-tag" style="font-size:${tagSz}">SOLD OUT</span></div>`;
+    } else {
+      ban.innerHTML=
+        (price?`<div class="ban-price"><span class="ban-num" style="font-size:${numSz}">${price}</span></div>`:'')+
+        `<div class="ban-slot"><span class="ban-tag" style="font-size:${tagSz}">SLOT #</span><span class="ban-num" style="font-size:${numSz}">${slot.slotNumber}</span></div>`+
+        `<div class="ban-ticket"><span class="ban-tag" style="font-size:${tagSz}">CURRENT</span><span class="ban-num" style="font-size:${numSz}">${slot.currentTicket||1}</span></div>`;
+    }
+    wrap.appendChild(ban);
+
+    grid.appendChild(wrap);
+  });
+
+  // Trailing spacers to center last row
+  if(lastRowCount !== 0){
+    for(let s=0;s<spacersAfter;s++) grid.appendChild(mkSpacer());
+  }
+}
+
+function showPh(cell,num){
+  const ph=document.createElement('div');ph.className='cell-placeholder';
+  ph.innerHTML=`<div class="ph-icon">🎫</div><div class="ph-num">#${num}</div>`;
+  cell.appendChild(ph);
+}
+
+// ── FEATURED PANEL ───────────────────────────────────────
+function renderFeatured(){
+  const cfg=loadDisplayCfg();
+  const featuredWrap=document.getElementById('featuredWrap');
+  const gridWrap=document.getElementById('gridWrap');
+  const featEnabled=cfg.featuredEnabled&&(cfg.featuredSlots||[]).length>=3;
+  if(!featEnabled){
+    featuredWrap.style.display='none';
+    featuredWrap.innerHTML='';
+    gridWrap.classList.remove('has-featured');
+    return;
+  }
+  // Compute cell size matching renderGrid (must stay in sync)
+  const pad=16;
+  const availH=gridWrap.clientHeight-pad*2-2;
+  const availW=gridWrap.clientWidth-pad*2-2;
+  const gap=0.1;
+  const isPortrait=document.body.classList.contains('portrait');
+  const slotsAll=[...slotsData.slots].sort((a,b)=>a.slotNumber-b.slotNumber);
+  const count=slotsAll.length;
+  const est=calcSquareLayout(count,availW,availH,gap);
+
+  let cellSize;
+  if(isPortrait){
+    // Portrait: 3 slots side by side across full width
+    const maxCellByWidth=Math.floor((availW-2*gap)/6);
+    cellSize=Math.min(est.cellSize,maxCellByWidth);
+  } else {
+    // Landscape: 3 slots stacked in right column
+    const maxCellByHeight=Math.floor((availH-2*gap)/6);
+    const featColW=est.cellSize*2+gap+8;
+    const leftW=availW-featColW-gap;
+    const refined=calcSquareLayout(count,leftW,availH,gap);
+    cellSize=Math.min(refined.cellSize,maxCellByHeight);
+  }
+  const featSize=cellSize*2+gap; // square: 2x cell in both dims
+
+  featuredWrap.style.display='flex';
+  featuredWrap.style.gap=gap+'px';
+  featuredWrap.style.justifyContent='center';
+  featuredWrap.style.alignItems='center';
+  featuredWrap.innerHTML='';
+  if(isPortrait){
+    featuredWrap.style.flexDirection='row';
+    featuredWrap.style.width='100%';
+    featuredWrap.style.height=featSize+'px';
+    // Portrait: featured at top — move before lotteryGrid
+    const lg=document.getElementById('lotteryGrid');
+    if(lg&&featuredWrap.nextSibling!==lg) gridWrap.insertBefore(featuredWrap,lg);
+  } else {
+    featuredWrap.style.flexDirection='column';
+    featuredWrap.style.width=featSize+'px';
+    featuredWrap.style.height='auto';
+    // Landscape: featured at right — move after lotteryGrid
+    if(featuredWrap.previousSibling!==document.getElementById('lotteryGrid')) gridWrap.appendChild(featuredWrap);
+  }
+
+  const featSlotNums=(cfg.featuredSlots||[]).slice(0,3);
+  featSlotNums.forEach(slotNum=>{
+    const slot=slotsAll.find(s=>s.slotNumber===slotNum);
+    const tier=slot?getTier(slot._price):'no-tier';
+    const isSoldOut=slot&&(slot.isFinished===true||((slot.totalTickets>0)&&(slot.currentTicket||1)>slot.totalTickets));
+    const wrap=document.createElement('div');
+    wrap.className='cell-wrap '+tier+' spotlight-active featured-cell';
+    wrap.style.cssText=`width:${featSize}px;height:${featSize}px;flex-shrink:0;`;
+
+    const cell=document.createElement('div');
+    const showEmpty=!slot||isSoldOut||!slot._image;
+    cell.className='cell'+(showEmpty?' empty':'');
+    if(slot&&!isSoldOut&&slot._image){
+      const img=document.createElement('img');
+      img.className='cell-img';
+      img.src=slot._image; img.alt=slot._name||'';
+      img.onerror=()=>{img.remove();showPh(cell,slotNum);};
+      cell.appendChild(img);
+    } else {
+      showPh(cell,slot?slot.slotNumber:slotNum);
+    }
+    wrap.appendChild(cell);
+
+    // Banner — price top-left, slot# top-right, current bottom-center
+    const fPrice=slot?slot._price||'':'';
+    const fTagSz=Math.max(5,Math.round(featSize*0.065))+'px';
+    const fNumSz=Math.max(7,Math.round(featSize*0.11))+'px';
+    const ban=document.createElement('div');
+    ban.className='slot-banner';
+    if(isSoldOut||!slot){
+      ban.innerHTML=
+        (fPrice?`<div class="ban-price"><span class="ban-num" style="font-size:${fNumSz}">${fPrice}</span></div>`:'')+
+        `<div class="ban-slot"><span class="ban-tag" style="font-size:${fTagSz}">SLOT #</span><span class="ban-num" style="font-size:${fNumSz}">${slotNum}</span></div>`+
+        `<div class="ban-ticket"><span class="ban-tag" style="font-size:${fTagSz}">SOLD OUT</span></div>`;
+    } else {
+      ban.innerHTML=
+        (fPrice?`<div class="ban-price"><span class="ban-num" style="font-size:${fNumSz}">${fPrice}</span></div>`:'')+
+        `<div class="ban-slot"><span class="ban-tag" style="font-size:${fTagSz}">SLOT #</span><span class="ban-num" style="font-size:${fNumSz}">${slot.slotNumber}</span></div>`+
+        `<div class="ban-ticket"><span class="ban-tag" style="font-size:${fTagSz}">CURRENT</span><span class="ban-num" style="font-size:${fNumSz}">${slot.currentTicket||1}</span></div>`;
+    }
+    wrap.appendChild(ban);
+    featuredWrap.appendChild(wrap);
+  });
+}
+
+// ── FULL RENDER ───────────────────────────────────────────
+// ── PRIZE OVERLAY ─────────────────────────────────────────
+function applyPrizeOverlays(){
+  // Remove all existing overlays first
+  document.querySelectorAll('.prize-overlay').forEach(el=>el.remove());
+  let data=null;
+  try{const r=localStorage.getItem('lotteryApp_prize_overlay');if(r)data=JSON.parse(r);}catch{}
+  if(!data||!Array.isArray(data)||data.length===0) return;
+
+  const grid=document.getElementById('lotteryGrid');
+  if(!grid) return;
+  // Map slot number → cell-wrap by iterating grid children
+  // grid children are cell-wraps in slot order (spacers have no data-slot)
+  const slots=[...slotsData.slots].sort((a,b)=>a.slotNumber-b.slotNumber);
+  const wrapBySlot={};
+  let si=0;
+  Array.from(grid.children).forEach(child=>{
+    if(child.classList.contains('cell-wrap')&&si<slots.length){
+      wrapBySlot[slots[si].slotNumber]=child;
+      si++;
+    }
+  });
+
+  data.forEach(item=>{
+    const wrap=wrapBySlot[item.slotNumber];
+    if(!wrap) return;
+    const top5=(item.prizes||[]).slice(0,5);
+    const rows=top5.map(p=>{
+      const printed=parseInt((p.printed||'0').replace(/,/g,''))||0;
+      const claimed=parseInt((p.claimed||'0').replace(/,/g,''))||0;
+      const pct=printed>0?Math.round(claimed/printed*100):0;
+      const cls=pct>=75?'high':pct>=40?'mid':'low';
+      const pctStr=p.claimed==='---'||p.claimed===''?'—':pct+'%';
+      return `<div class="prize-ov-row">
+        <span class="prize-ov-amt">${p.amount}</span>
+        <span class="prize-ov-pct ${cls}">${pctStr}</span>
+      </div>`;
+    }).join('');
+    const ov=document.createElement('div');
+    ov.className='prize-overlay';
+    ov.innerHTML=`<div class="prize-ov-title">${item.name||'Game #'+item.gameId}</div>${rows}`;
+    wrap.appendChild(ov);
+  });
+}
+
+function fullRender(){
+  renderPromo();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    renderGrid();renderFeatured();applyPrizeOverlays();
+  }));
+  // Re-render after lotto banner height transition completes (400ms)
+  setTimeout(()=>{renderGrid();renderFeatured();applyPrizeOverlays();},450);
+}
+function restartSpotlightIfNeeded(){
+  const cfg=loadDisplayCfg();
+  if(cfg.spotlightEnabled&&(cfg.spotlightSlots||[]).length>0){
+    startSpotlightTimer();
+  } else {
+    stopSpotlightTimer();
+    renderGrid();
+  }
+}
+
+// ── AUTO REFRESH ──────────────────────────────────────────
+function flashUpdate(){
+  const f=document.getElementById('updateFlash');
+  f.classList.add('show');setTimeout(()=>f.classList.remove('show'),2500);
+}
+window.addEventListener('storage',e=>{
+  if(['lotteryApp_slots','lotteryApp_promo','lotteryApp_updated'].includes(e.key)){
+    slotsData=loadSlots();promoData=loadPromo();fullRender();flashUpdate();
+  }
+  if(e.key===DCFG_KEY){applyDisplayCfg();restartSpotlightIfNeeded();}
+  if(e.key===AD_KEY){adCfg=loadAdCfg();}
+  if(e.key==='lotteryApp_ad_active') syncAdFromStorage();
+  if(e.key==='lotteryApp_ad_preview'){if(!adActive){toggleAdMode();setTimeout(()=>{if(adActive)toggleAdMode();},3000);}}
+  if(e.key==='lotteryApp_prize_overlay') applyPrizeOverlays();
+});
+let lastTs='',lastAdState='',lastPrizeOverlay='';
+setInterval(()=>{
+  const ts=localStorage.getItem('lotteryApp_updated')||'';
+  if(ts!==lastTs){lastTs=ts;slotsData=loadSlots();promoData=loadPromo();fullRender();flashUpdate();}
+  const adState=localStorage.getItem('lotteryApp_ad_active')||'0';
+  if(adState!==lastAdState){lastAdState=adState;syncAdFromStorage();}
+  const po=localStorage.getItem('lotteryApp_prize_overlay')||'';
+  if(po!==lastPrizeOverlay){lastPrizeOverlay=po;applyPrizeOverlays();}
+},2000);
+
+// ── RESIZE ────────────────────────────────────────────────
+let rzTimer;
+window.addEventListener('resize',()=>{
+  clearTimeout(rzTimer);
+  rzTimer=setTimeout(()=>{
+    const cfg=loadDisplayCfg();
+    const wantPortrait=!!cfg.portrait;
+    const windowIsLandscape=window.innerWidth>window.innerHeight;
+    document.body.classList.toggle('needs-rotation', wantPortrait && windowIsLandscape);
+    fullRender();
+    // Extra pass after browser finishes reflow (catches fullscreen exit timing)
+    setTimeout(()=>{renderGrid();renderFeatured();applyPrizeOverlays();},300);
+  },200);
+});
+
+// Re-render after fullscreen change — exit causes layout shift
+document.addEventListener('fullscreenchange',()=>{
+  setTimeout(()=>fullRender(),100);
+  setTimeout(()=>{renderGrid();renderFeatured();applyPrizeOverlays();},400);
+});
+
+// ── AD MODE ────────────────────────────────────────────────
+const AD_KEY='lotteryApp_ad_cfg';
+function loadAdCfg(){try{const r=localStorage.getItem(AD_KEY);return r?JSON.parse(r):{toggleKey:'ad',screens:[],isSlideshow:false}}catch{return{toggleKey:'ad',screens:[],isSlideshow:false}}}
+let adCfg=loadAdCfg();
+let adActive=false;
+let adSlideIdx=0;
+let adSlideTimer=null;
+
+function toggleAdMode(){
+  adActive=!adActive;
+  if(adActive){
+    adSlideIdx=0;
+    renderAdOverlay();
+    if(adCfg.isSlideshow)startAdSlideshow();
+  } else {
+    stopAdSlideshow();
+    document.getElementById('adOverlay').classList.remove('active');
+  }
+}
+
+async function renderAdOverlay(){
+  adCfg=loadAdCfg();
+  const overlay=document.getElementById('adOverlay');
+  const screen=adCfg.screens[adSlideIdx];
+  overlay.innerHTML='';
+  if(!screen||!screen.items||screen.items.length===0){
+    overlay.innerHTML='<div style="color:#444;font-size:18px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">No ad content — configure in Manager</div>';
+  } else {
+    const pool=adCfg.mediaPool||[];
+    for(const item of screen.items){
+      const img=pool.find(i=>i.id===item.imgId);if(!img)continue;
+      let src=img.src||'';
+      if(src.startsWith('idb:')){
+        try{
+          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',1);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+          const key='headerPromo_'+src.slice(4);
+          src=await new Promise((res,rej)=>{const tx=idb.transaction('images','readonly');const r=tx.objectStore('images').get(key);r.onsuccess=()=>res(r.result||'');r.onerror=rej;});
+        }catch{src='';}
+      }
+      if(!src) continue;
+      const el=document.createElement('div');
+      el.className='ad-overlay-item';
+      el.style.cssText=`left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;`;
+      el.innerHTML=`<img src="${src}" alt="">`;
+      overlay.appendChild(el);
+    }
+  }
+  overlay.classList.add('active');
+}
+
+function startAdSlideshow(){
+  if(!adCfg.isSlideshow||adCfg.screens.length<2)return;
+  const dur=(adCfg.screens[adSlideIdx]?.duration||8)*1000;
+  adSlideTimer=setTimeout(()=>{
+    adSlideIdx=(adSlideIdx+1)%adCfg.screens.length;
+    renderAdOverlay();
+    startAdSlideshow();
+  },dur);
+}
+function stopAdSlideshow(){clearTimeout(adSlideTimer);}
+
+// Shift+A is handled by manager — display reacts to localStorage key
+function syncAdFromStorage(){
+  const on=localStorage.getItem('lotteryApp_ad_active')==='1';
+  if(on&&!adActive){adActive=true;adSlideIdx=0;renderAdOverlay();if(adCfg.isSlideshow)startAdSlideshow();}
+  else if(!on&&adActive){adActive=false;stopAdSlideshow();document.getElementById('adOverlay').classList.remove('active');}
+}
+
+// Mouse movement on display exits ad and tells manager
+document.addEventListener('mousemove',()=>{
+  if(adActive){
+    localStorage.setItem('lotteryApp_ad_active','0');
+    localStorage.setItem('lotteryApp_updated',Date.now()+'');
+    adActive=false;
+    stopAdSlideshow();
+    document.getElementById('adOverlay').classList.remove('active');
+  }
+},{passive:true});
+
+// ── SPOTLIGHT TIMER ─────────────────────────────────────
+let _spotCurrentSlot=null;
+let _spotTimer=null;
+let _spotIdx=0;
+
+function startSpotlightTimer(){
+  stopSpotlightTimer();
+  const cfg=loadDisplayCfg();
+  if(!cfg.spotlightEnabled||!cfg.spotlightSlots||!cfg.spotlightSlots.length) return;
+  // Simultaneous mode: no timer needed, renderGrid reads all slots from cfg
+  if(cfg.spotlightSimultaneous){ renderGrid(); return; }
+  _spotIdx=0;
+  _spotCurrentSlot=cfg.spotlightSlots[0];
+  renderGrid();
+  const dur=(cfg.spotlightDuration||5)*1000;
+  _spotTimer=setInterval(()=>{
+    const c=loadDisplayCfg();
+    if(c.spotlightSimultaneous){ stopSpotlightTimer(); renderGrid(); return; }
+    const slots=c.spotlightSlots||[];
+    if(!slots.length) return;
+    _spotIdx=(_spotIdx+1)%slots.length;
+    _spotCurrentSlot=slots[_spotIdx];
+    renderGrid();
+  },dur);
+}
+
+function stopSpotlightTimer(){
+  if(_spotTimer){clearInterval(_spotTimer);_spotTimer=null;}
+  _spotCurrentSlot=null;
+}
+
+
+// INIT
+applyDisplayCfg();
+syncAdFromStorage();
+fullRender();
+restartSpotlightIfNeeded();
+
+
+</script>
+</body>
+</html>

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Home</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#0d1117;
+  --border:#30363d;--border2:#1c2129;
+  --text:#e6edf3;--muted:#8b949e;--muted2:#6e7681;
+  --blue:#58a6ff;--green:#3fb950;--yellow:#f5c500;--orange:#f0883e;--purple:#bc8cff;
+  --red:#f85149;--amber:#d29922;
+}
+html[data-theme="light"]{
+  --bg:#f6f8fa;--surface:#ffffff;--surface2:#eef1f4;
+  --border:#d0d7de;--border2:#e8ecf0;
+  --text:#1f2328;--muted:#57606a;--muted2:#6e7781;
+  --blue:#0969da;--green:#1a7f37;--yellow:#9a6700;--orange:#bc4c00;--purple:#8250df;
+  --red:#cf222e;--amber:#9a6700;
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);overflow:auto}
+body{padding:24px}
+
+.stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;cursor:default;transition:border-color .15s}
+.stat-card:hover{border-color:var(--blue)}
+.stat-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.stat-value{font-size:clamp(18px,2.2vw,28px);font-weight:800;color:var(--text);line-height:1}
+.stat-sub{font-size:11px;color:var(--muted2);margin-top:5px}
+.stat-card.green .stat-value{color:var(--green)}
+.stat-card.yellow .stat-value{color:var(--yellow)}
+.stat-card.blue .stat-value{color:var(--blue)}
+.stat-card.orange .stat-value{color:var(--orange)}
+.stat-card.purple .stat-value{color:var(--purple)}
+
+.alert-bar{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:42px}
+.alert-label{font-weight:700;font-size:12px;white-space:nowrap}
+.alert-label.red{color:var(--red)}
+.alert-label.amber{color:var(--amber)}
+.alert-label.green{color:var(--green)}
+.pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700}
+.pill-red{background:rgba(248,81,73,.15);color:var(--red)}
+.pill-amber{background:rgba(210,153,34,.15);color:var(--amber)}
+.pill-green{background:rgba(63,185,80,.15);color:var(--green)}
+.sep{color:var(--muted2);font-size:14px}
+
+.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:20px}
+.section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px}
+.lottery-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.lottery-card-img{height:120px;background:var(--surface2);overflow:hidden;border-bottom:1px solid var(--border2);position:relative}
+.lottery-card-img img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;position:absolute;inset:0}
+.lottery-card-img .no-img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:28px;opacity:.2}
+.slot-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 10px;border-bottom:1px solid var(--border2)}
+.slot-row:last-child{border-bottom:none}
+.slot-row.sold-out{background:rgba(248,81,73,.12)}
+.slot-row.sold-out span{color:var(--red)}
+.slot-row.low{background:rgba(210,153,34,.10)}
+.slot-row.low span{color:var(--amber)}
+.slot-row.normal span.slot-num{color:var(--muted)}
+.slot-row.normal span.slot-rem{color:var(--text)}
+
+.refresh-btn{appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:11px;font-weight:700;padding:4px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
+.refresh-btn:hover{border-color:var(--blue);color:var(--blue)}
+.last-updated{font-size:10px;color:var(--muted2);margin-left:8px}
+</style>
+</head>
+<body>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <div style="font-size:20px;font-weight:800;color:var(--text)">📊 Dashboard</div>
+  <div style="display:flex;align-items:center">
+    <button class="refresh-btn" onclick="loadStats()">↺ Refresh</button>
+    <button class="refresh-btn" onclick="window._debug()" style="margin-left:4px">🔍 Debug</button>
+    <span class="last-updated" id="lastUpdated"></span>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="stat-card green">
+    <div class="stat-label">This Month Sales</div>
+    <div class="stat-value" id="statThisMonth">—</div>
+    <div class="stat-sub" id="statThisMonthSub"></div>
+  </div>
+  <div class="stat-card yellow">
+    <div class="stat-label">Last Month Sales</div>
+    <div class="stat-value" id="statLastMonth">—</div>
+    <div class="stat-sub" id="statLastMonthSub"></div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Today's Sales</div>
+    <div class="stat-value" id="statToday">—</div>
+    <div class="stat-sub" id="statTodaySub"></div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-label">Yesterday's Sales</div>
+    <div class="stat-value" id="statYesterday">—</div>
+    <div class="stat-sub" id="statYesterdaySub"></div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-label">Total Inventory Value</div>
+    <div class="stat-value" id="statInventory">—</div>
+    <div class="stat-sub" id="statInventorySub"></div>
+  </div>
+</div>
+
+<!-- ALERT BAR -->
+<div class="alert-bar" id="alertBar"></div>
+
+<!-- SLOT BREAKDOWN -->
+<div class="section">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div class="section-title" style="margin-bottom:0">🎰 Slot Breakdown by Game</div>
+    <div style="position:relative">
+      <button class="refresh-btn" id="filterBtn" onclick="toggleFilterMenu()">⚙ Filter <span id="filterCount"></span></button>
+      <div id="filterMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;z-index:100;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        <div style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Filter by price</div>
+        <div id="filterOptions"></div>
+        <div style="border-top:1px solid var(--border2);margin-top:8px;padding-top:8px;display:flex;gap:6px">
+          <button class="refresh-btn" style="flex:1;font-size:10px" onclick="clearFilter()">Clear</button>
+          <button class="refresh-btn" style="flex:1;font-size:10px;border-color:var(--blue);color:var(--blue)" onclick="applyFilter()">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cards-grid" id="slotCards"></div>
+</div>
+
+<script>
+window.onerror=function(msg,src,line,col,err){document.title='ERR:'+line+':'+msg;return false;};
+window._debug=function(){
+  const log=loadLog();
+  const now=new Date();
+  const [todayS]=dayBounds(now);
+  const sales=log.filter(e=>e.type==='sale'&&e.timestamp>=todayS);
+  const last3=log.slice(-3).map(e=>`type=${e.type} ts=${new Date(e.timestamp).toLocaleTimeString()} price=${e.price}`).join('\n');
+  alert('Log entries: '+log.length+'\nToday sales: '+sales.length+'\nLast 3:\n'+last3);
+};
+const LOG_KEY='lotteryApp_sales_log';
+const SLOTS_KEY='lotteryApp_slots';
+const DB_KEY='lotteryApp_db';
+const INV_KEY='lotteryApp_inventory';
+const MGR_IMG_STORE='images';
+const MGR_IMG_DB='lotteryImages';
+
+let imgCache={};
+
+function openImgDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(MGR_IMG_DB,1);
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e.target.error);
+  });
+}
+async function warmImgCache(){
+  try{
+    const idb=await openImgDB();
+    await new Promise((res,rej)=>{
+      const result={};
+      const cur=idb.transaction(MGR_IMG_STORE,'readonly').objectStore(MGR_IMG_STORE).openCursor();
+      cur.onsuccess=e=>{const c=e.target.result;if(c){result[c.key]=c.value;c.continue();}else{Object.assign(imgCache,result);res();}};
+      cur.onerror=e=>rej(e.target.error);
+    });
+  }catch(e){}
+}
+function resolveImg(img){
+  if(!img) return null;
+  if(typeof img==='string'&&img.startsWith('idb:')) return imgCache[img.slice(4)]||null;
+  return img;
+}
+
+function loadLog(){try{const r=localStorage.getItem(LOG_KEY);return r?JSON.parse(r):[]}catch{return[]}}
+function loadSlots(){try{const r=localStorage.getItem(SLOTS_KEY);return r?JSON.parse(r):{version:1,slots:[]}}catch{return{version:1,slots:[]}}}
+function loadDB(){try{const r=localStorage.getItem(DB_KEY);return r?JSON.parse(r):{version:1,lotteries:[]}}catch{return{version:1,lotteries:[]}}}
+function loadInventory(){try{const r=localStorage.getItem(INV_KEY);return r?JSON.parse(r):[]}catch{return[]}}
+
+function parsePrice(p){return parseFloat(String(p||'').replace(/[^0-9.]/g,''))||0}
+
+function fmt(n){
+  if(n>=1000000) return '$'+(n/1000000).toFixed(2)+'M';
+  return '$'+Math.round(n).toLocaleString();
+}
+
+function dayBounds(d){
+  const s=new Date(d);s.setHours(0,0,0,0);
+  const e=new Date(d);e.setHours(23,59,59,999);
+  return [s.getTime(),e.getTime()];
+}
+function monthBounds(year,month){
+  return [new Date(year,month,1,0,0,0,0).getTime(), new Date(year,month+1,0,23,59,59,999).getTime()];
+}
+function salesInRange(log,start,end){
+  let total=0,count=0;
+  log.forEach(e=>{
+    if(e.timestamp<start||e.timestamp>end) return;
+    if(e.type==='sale'){
+      total+=parsePrice(e.price)*(e.ticketsSold||1);
+      count+=(e.ticketsSold||1);
+    } else if(e.type==='new_pack'&&e.prevUniquePackId&&e.uniquePackId&&e.prevUniquePackId===e.uniquePackId&&e.prevTicketCount>0){
+      // Same-pack update logged as new_pack (legacy bug) — count as sale
+      const slot=e.currentTicket||0;
+      const sold=slot-e.prevTicketCount;
+      if(sold>0){
+        total+=parsePrice(e.price)*sold;
+        count+=sold;
+      }
+    }
+  });
+  return{total,count};
+}
+
+let invTicketMap={};
+
+function getTotal(slot){
+  if(slot.totalTickets&&slot.totalTickets>0) return slot.totalTickets;
+  return invTicketMap[slot.packBarcode]
+    ||invTicketMap[slot.uniquePackId]
+    ||invTicketMap[(slot.lotteryId||'')+(slot.packId||'')]
+    ||0;
+}
+
+function loadStats(){
+  const log=loadLog();
+  const slotsData=loadSlots();
+  const db=loadDB();
+  const inv=loadInventory();
+  const now=new Date();
+
+  const [todayS,todayE]=dayBounds(now);
+  const yesterday=new Date(now);yesterday.setDate(now.getDate()-1);
+  const [yestS,yestE]=dayBounds(yesterday);
+  const [thisMonthS,thisMonthE]=monthBounds(now.getFullYear(),now.getMonth());
+  const lastMonth=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const [lastMonthS,lastMonthE]=monthBounds(lastMonth.getFullYear(),lastMonth.getMonth());
+
+  const thisM=salesInRange(log,thisMonthS,thisMonthE);
+  const lastM=salesInRange(log,lastMonthS,lastMonthE);
+  const today=salesInRange(log,todayS,todayE);
+  const yest=salesInRange(log,yestS,yestE);
+
+  // Inventory value
+  const lotteryMap={};
+  (db.lotteries||[]).forEach(l=>{lotteryMap[l.lotteryId||l.id||'']=l;});
+  const soldOutIds=new Set();
+  const activeSlotMap={};
+  (slotsData.slots||[]).forEach(slot=>{
+    if(!slot.uniquePackId) return;
+    const uid=(slot.lotteryId||'')+(slot.packId||slot.uniquePackId||'');
+    const uid2=slot.uniquePackId;
+    if(slot.isFinished){soldOutIds.add(uid);soldOutIds.add(uid2);}
+    else{activeSlotMap[uid]=slot.currentTicket||1;activeSlotMap[uid2]=slot.currentTicket||1;}
+  });
+  let invValue=0,invPacks=0;
+  inv.forEach(item=>{
+    const uid=(item.lotteryId||'')+(item.packId||'');
+    const uid2=item.uniquePackId||'';
+    if(soldOutIds.has(uid)||soldOutIds.has(uid2)) return;
+    const p=parsePrice(item.price);
+    const t=parseInt(item.totalTickets)||0;
+    if(p<=0||t<=0) return;
+    const cur=activeSlotMap[uid]||activeSlotMap[uid2]||null;
+    const remaining=cur?Math.max(0,t-(cur-1)):t;
+    invValue+=p*remaining;invPacks++;
+  });
+
+  document.getElementById('statThisMonth').textContent=fmt(thisM.total);
+  document.getElementById('statThisMonthSub').textContent=thisM.count+' tickets · '+now.toLocaleString('default',{month:'long'});
+  document.getElementById('statLastMonth').textContent=fmt(lastM.total);
+  document.getElementById('statLastMonthSub').textContent=lastM.count+' tickets · '+lastMonth.toLocaleString('default',{month:'long'});
+  document.getElementById('statToday').textContent=fmt(today.total);
+  document.getElementById('statTodaySub').textContent=today.count+' tickets sold';
+  document.getElementById('statYesterday').textContent=fmt(yest.total);
+  document.getElementById('statYesterdaySub').textContent=yest.count+' tickets';
+  document.getElementById('statInventory').textContent=fmt(invValue);
+  document.getElementById('statInventorySub').textContent=invPacks+' packs';
+
+  // ── SLOT BREAKDOWN ──
+  const slots=[...(slotsData.slots||[])].sort((a,b)=>a.slotNumber-b.slotNumber);
+
+  const soldOutSlots=[];
+  const lowSlots=[];
+  const emptySlots=[];
+
+  // Group by lotteryDbId (internal UUID — more reliable than lotteryId)
+  // First build invTicketMap so getTotal() works inside the loop
+  invTicketMap={};
+  inv.forEach(item=>{
+    if(item.totalTickets&&parseInt(item.totalTickets)>0){
+      if(item.packBarcode) invTicketMap[item.packBarcode]=parseInt(item.totalTickets);
+      if(item.uniquePackId) invTicketMap[item.uniquePackId]=parseInt(item.totalTickets);
+      const uid=(item.lotteryId||'')+(item.packId||'');
+      if(uid) invTicketMap[uid]=parseInt(item.totalTickets);
+    }
+  });
+  const groups={};
+  slots.forEach(slot=>{
+    const isEmpty=!slot.lotteryDbId;
+    if(isEmpty){emptySlots.push(slot.slotNumber);return;}
+    const total=getTotal(slot);
+    const sold=(slot.currentTicket||1)-1;
+    const remaining=total>0?Math.max(0,total-sold):null;
+    if(slot.isFinished) soldOutSlots.push(slot.slotNumber);
+    else if(remaining!==null&&remaining<=5) lowSlots.push(slot.slotNumber);
+
+    const lid=slot.lotteryDbId;
+    if(!groups[lid]){
+      const lot=lotteryMap[slot.lotteryId||''];
+      const img=slot._image||resolveImg(lot?.image)||null;
+      const price=slot._price||lot?.price||'';
+      groups[lid]={image:img,price,slots:[]};
+    }
+    groups[lid].slots.push(slot);
+  });
+
+  // Alert bar
+  const bar=document.getElementById('alertBar');
+  let barHtml='';
+  if(soldOutSlots.length){
+    barHtml+=`<span class="alert-label red">Sold out:</span>`;
+    barHtml+=soldOutSlots.map(n=>`<span class="pill pill-red">#${n}</span>`).join('');
+  }
+  if(lowSlots.length){
+    if(barHtml) barHtml+=`<span class="sep">·</span>`;
+    barHtml+=`<span class="alert-label amber">Low (&le;5):</span>`;
+    barHtml+=lowSlots.map(n=>`<span class="pill pill-amber">#${n}</span>`).join('');
+  }
+  if(emptySlots.length){
+    if(barHtml) barHtml+=`<span class="sep">·</span>`;
+    barHtml+=`<span class="alert-label green">Empty:</span>`;
+    barHtml+=emptySlots.map(n=>`<span class="pill pill-green">#${n}</span>`).join('');
+  }
+  if(!barHtml) barHtml='<span style="color:var(--muted2);font-size:12px">All slots healthy</span>';
+  bar.innerHTML=barHtml;
+
+  lastSortedGroups=Object.entries(groups).sort((a,b)=>b[1].slots.length-a[1].slots.length);
+
+  const priceSet=new Set();
+  lastSortedGroups.forEach(([,g])=>{if(g.price) priceSet.add(g.price);});
+  const sortedPrices=[...priceSet].sort((a,b)=>parsePrice(a)-parsePrice(b));
+  populateFilterOptions(sortedPrices);
+  updateFilterCount();
+
+  const grid=document.getElementById('slotCards');
+  if(!lastSortedGroups.length){
+    grid.innerHTML='<div style="color:var(--muted2);font-size:13px">No slots configured</div>';
+    return;
+  }
+  renderCards();
+  document.getElementById('lastUpdated').textContent='Updated '+new Date().toLocaleTimeString();
+}
+
+let activeFilters=new Set();
+let allPrices=[];
+
+function toggleFilterMenu(){
+  const m=document.getElementById('filterMenu');
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+document.addEventListener('click',e=>{
+  const m=document.getElementById('filterMenu');
+  const btn=document.getElementById('filterBtn');
+  if(m&&btn&&!m.contains(e.target)&&!btn.contains(e.target)) m.style.display='none';
+});
+function populateFilterOptions(prices){
+  allPrices=prices;
+  const container=document.getElementById('filterOptions');
+  container.innerHTML=prices.map(p=>`
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text);padding:3px 0;cursor:pointer">
+      <input type="checkbox" value="${p}" ${activeFilters.has(p)?'checked':''} style="accent-color:var(--blue)">
+      ${p}
+    </label>`).join('');
+}
+function applyFilter(){
+  const checks=document.querySelectorAll('#filterOptions input[type=checkbox]');
+  activeFilters=new Set([...checks].filter(c=>c.checked).map(c=>c.value));
+  document.getElementById('filterMenu').style.display='none';
+  updateFilterCount();
+  renderCards();
+}
+function clearFilter(){
+  activeFilters.clear();
+  document.querySelectorAll('#filterOptions input[type=checkbox]').forEach(c=>c.checked=false);
+  document.getElementById('filterMenu').style.display='none';
+  updateFilterCount();
+  renderCards();
+}
+function updateFilterCount(){
+  const el=document.getElementById('filterCount');
+  el.textContent=activeFilters.size?`(${activeFilters.size})`:'';
+}
+
+let lastSortedGroups=[];
+
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderCards(){
+  const grid=document.getElementById('slotCards');
+  const filtered=activeFilters.size
+    ?lastSortedGroups.filter(([,g])=>activeFilters.has(g.price))
+    :lastSortedGroups;
+
+  if(!filtered.length){
+    grid.innerHTML='<div style="color:var(--muted2);font-size:13px">No slots match filter</div>';
+    return;
+  }
+
+  grid.innerHTML=filtered.map(([lid,g])=>{
+    const imgHtml=g.image
+      ?`<img src="${escH(g.image)}" alt="" onerror="this.style.display='none'">`
+      :`<span class="no-img">🎫</span>`;
+    const rowsHtml=g.slots.map(slot=>{
+      const total=getTotal(slot);
+      const sold=(slot.currentTicket||1)-1;
+      const remaining=total>0?Math.max(0,total-sold):null;
+      if(slot.isFinished){
+        return `<div class="slot-row sold-out"><span><b>#${slot.slotNumber}</b></span><span>sold out</span></div>`;
+      } else if(remaining!==null&&remaining<=5){
+        return `<div class="slot-row low"><span><b>#${slot.slotNumber}</b></span><span>${remaining} left</span></div>`;
+      } else {
+        const remText=remaining!==null?remaining+' left':'—';
+        return `<div class="slot-row normal"><span class="slot-num"><b>#${slot.slotNumber}</b></span><span class="slot-rem">${remText}</span></div>`;
+      }
+    }).join('');
+    return `<div class="lottery-card">
+      <div class="lottery-card-img">${imgHtml}</div>
+      <div>${rowsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function applyExternalTheme(theme){
+  document.documentElement.setAttribute('data-theme',theme);
+}
+applyExternalTheme(localStorage.getItem('lotteryApp_theme')||'dark');
+
+warmImgCache().then(()=>loadStats());
+
+// Cross-iframe storage events don't fire in same tab — poll instead
+let _lastUpdated='';
+setInterval(()=>{
+  const ts=localStorage.getItem('lotteryApp_updated')||'';
+  if(ts!==_lastUpdated){
+    _lastUpdated=ts;
+    applyExternalTheme(localStorage.getItem('lotteryApp_theme')||'dark');
+    warmImgCache().then(()=>loadStats());
+  }
+},5000);
+// Also refresh every 30s regardless
+setInterval(()=>warmImgCache().then(()=>loadStats()),30000);
+</script>
+</body>
+</html>
