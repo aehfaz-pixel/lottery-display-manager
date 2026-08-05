@@ -1,15 +1,16 @@
 {
   "name": "lottery-electron",
   "version": "1.0.16",
-  "description": "Lottery Manager — Electron App",
+  "description": "Lottery Manager \u2014 Electron App",
   "author": "Lottery Manager",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "set NODE_ENV=development && electron .",
     "rebuild-hid": "electron-rebuild -f -w uiohook-napi",
+    "prerelease-check": "node pre-release-check.js",
     "build": "electron-builder --publish always && node fix-release.js",
-    "release": "npm version patch --no-git-tag-version && node sync-version.js && electron-builder --publish always && node fix-release.js"
+    "release": "node pre-release-check.js && npm version patch --no-git-tag-version && node sync-version.js && electron-builder --publish always && node fix-release.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
