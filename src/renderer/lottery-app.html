@@ -53,18 +53,16 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ar
 }
 #frames iframe.active{display:block}
 #updateBar{
-  display:none;align-items:center;gap:10px;
-  background:#1a3a1f;border-bottom:1px solid #2ea043;
-  padding:6px 16px;font-size:12px;color:#3fb950;flex-shrink:0;
+  display:none;align-items:center;gap:10px;font-size:12px;font-weight:700;
+  padding:7px 14px;flex-shrink:0;
 }
-#updateBar.ready{background:#1a3a1f;border-color:#2ea043;color:#3fb950}
-#updateBar.downloading{background:#2e2410;border-bottom:1px solid #d29922;color:#d29922}
+#updateBar.show{display:flex}
+#updateBar.downloading{background:var(--warn);color:#2b1d00}
+#updateBar.ready{background:var(--green);color:#04210c}
 #updateBar button{
-  appearance:none;border:1px solid #2ea043;background:#238636;
-  color:#fff;font-size:11px;font-weight:700;padding:3px 10px;
-  border-radius:5px;cursor:pointer;margin-left:auto;white-space:nowrap;
+  appearance:none;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;
+  padding:5px 12px;border-radius:6px;cursor:pointer;
 }
-#updateBar.downloading button{border-color:#d29922;background:#9a6700}
 </style>
 </head>
 <body>
@@ -78,12 +76,13 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ar
     <button class="shell-tab" data-tab="repository" onclick="switchShellTab('repository')">🗄 Repository</button>
     <div class="spacer"></div>
     <button id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+    <span id="versionTag" style="font-size:10px;color:var(--muted);font-family:monospace;opacity:0.6;white-space:nowrap">v1.0.16</span>
     <button class="shell-tab" style="border-bottom:none;background:var(--primary);color:#fff;border-radius:7px;height:32px;padding:0 14px" onclick="openDisplayWindow()">📺 Open Display</button>
     <div class="scan-pill" id="shellScanPill"><span class="dot"></span><span id="shellScanText">Scanning active</span></div>
   </div>
   <div id="updateBar">
-    <span id="updateMsg">⬇ Update available</span>
-    <button id="updateBtn" onclick="handleUpdateBtn()">Restart &amp; Install</button>
+    <span id="updateBarText">Downloading update...</span>
+    <button id="updateBarBtn" onclick="installUpdateNow()" style="display:none">Restart & Install</button>
   </div>
   <div id="frames">
     <iframe id="frame-home" class="active" src="http://localhost:3000/lottery-home.html"></iframe>
@@ -171,8 +170,46 @@ function routeBarcode(code){
   }catch(e){}
 }
 
+function installUpdateNow(){
+  if(window.electronAPI && window.electronAPI.installUpdate){
+    window.electronAPI.installUpdate();
+  }
+}
+
 if(window.electronAPI){
   window.electronAPI.onBarcode(code=>routeBarcode(code));
+
+  const updateBar=document.getElementById('updateBar');
+  const updateBarText=document.getElementById('updateBarText');
+  const updateBarBtn=document.getElementById('updateBarBtn');
+
+  if(window.electronAPI.onUpdateAvailable){
+    window.electronAPI.onUpdateAvailable(({version})=>{
+      updateBar.classList.remove('ready');
+      updateBar.classList.add('show','downloading');
+      updateBarText.textContent=`Downloading update v${version}...`;
+      updateBarBtn.style.display='none';
+    });
+  }
+  if(window.electronAPI.onUpdateProgress){
+    window.electronAPI.onUpdateProgress(({percent})=>{
+      updateBar.classList.add('show','downloading');
+      updateBarText.textContent=`Downloading update... ${percent}%`;
+    });
+  }
+  if(window.electronAPI.onUpdateDownloaded){
+    window.electronAPI.onUpdateDownloaded(({version})=>{
+      updateBar.classList.remove('downloading');
+      updateBar.classList.add('show','ready');
+      updateBarText.textContent=`Update v${version} ready — restart to apply`;
+      updateBarBtn.style.display='inline-block';
+    });
+  }
+  if(window.electronAPI.onUpdateError){
+    window.electronAPI.onUpdateError(({message})=>{
+      console.error('[updater] error:', message);
+    });
+  }
 
   window.electronAPI.onCaptureState(({paused})=>{
     const pill=document.getElementById('shellScanPill');
@@ -212,41 +249,6 @@ document.querySelectorAll('#frames iframe').forEach(f=>{
     try{ if(f.contentWindow && f.contentWindow.applyExternalTheme) f.contentWindow.applyExternalTheme(loadTheme()); }catch(e){}
   });
 });
-// ── AUTO UPDATER ──────────────────────────────────────────
-let _updateDownloaded = false;
-
-function handleUpdateBtn(){
-  if(_updateDownloaded && window.electronAPI){
-    window.electronAPI.installUpdate();
-  }
-}
-
-if(window.electronAPI){
-  window.electronAPI.onUpdateAvailable(info=>{
-    const bar=document.getElementById('updateBar');
-    const msg=document.getElementById('updateMsg');
-    const btn=document.getElementById('updateBtn');
-    bar.classList.remove('ready');
-    bar.classList.add('downloading');
-    msg.textContent=`⬇ Downloading update v${info.version}…`;
-    btn.textContent='Downloading…';
-    btn.disabled=true;
-    bar.style.display='flex';
-  });
-
-  window.electronAPI.onUpdateDownloaded(info=>{
-    _updateDownloaded=true;
-    const bar=document.getElementById('updateBar');
-    const msg=document.getElementById('updateMsg');
-    const btn=document.getElementById('updateBtn');
-    bar.classList.remove('downloading');
-    bar.classList.add('ready');
-    msg.textContent=`✓ Update v${info.version} ready — restart to apply`;
-    btn.textContent='Restart & Install';
-    btn.disabled=false;
-    bar.style.display='flex';
-  });
-}
 </script>
 </body>
 </html>

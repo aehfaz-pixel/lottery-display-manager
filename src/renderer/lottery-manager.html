@@ -383,134 +383,68 @@ html[data-theme="light"] .slot-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.18)}
 <!-- PROMO DISPLAY MODAL (merged Promo + Ad) -->
 <div class="overlay" id="promoDisplayModal" style="display:none" onclick="if(event.target===this)closePromoDisplayModal()">
 <div class="modal ad-modal">
-  <h2>🎯 Promo Display</h2>
-  <div class="rpt-tabs" style="margin:-4px 0 16px">
-    <div class="rpt-tab active" id="pdTab-promo" onclick="switchPdTab('promo')">Banner</div>
-    <div class="rpt-tab" id="pdTab-header" onclick="switchPdTab('header')">Header</div>
-    <div class="rpt-tab" id="pdTab-ad" onclick="switchPdTab('ad')">Ad Display</div>
+  <h2>🎯 Promo Display — Slideshow</h2>
+
+  <!-- ENABLE TOGGLE -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+    <div class="toggle" id="slideshowToggle" onclick="toggleSlideshow()"></div>
+    <span id="slideshowToggleLbl" style="font-size:12px;color:var(--muted)">Slideshow disabled</span>
   </div>
 
-  <!-- HEADER TAB -->
-  <div id="pdPanel-header" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <div class="toggle" id="headerToggle" onclick="toggleHeader()"></div>
-      <span id="headerToggleLbl" style="font-size:12px;color:var(--muted)">Header disabled</span>
+  <div id="slideshowOptions" style="display:none">
+
+    <!-- HEIGHT + BG -->
+    <div style="display:flex;gap:16px;margin-bottom:14px;font-size:12px;align-items:center">
+      <span style="color:var(--muted);font-weight:600;white-space:nowrap">Height:</span>
+      <input type="range" id="slideshowHeightPct" min="4" max="20" value="8" step="0.5"
+        style="flex:1" oninput="saveSlideshowPct(this.value)">
+      <span id="slideshowHeightPctLbl" style="color:var(--text);font-weight:700;min-width:36px">8%</span>
+      <span style="color:var(--muted);font-weight:600;white-space:nowrap;margin-left:8px">Background:</span>
+      <input type="color" id="slideshowBgColor" value="#000000" oninput="saveSlideshowBg(this.value)" style="width:36px;height:28px;border:none;border-radius:5px;cursor:pointer;padding:0">
     </div>
-    <div id="headerOptionsRow" style="display:none;flex-direction:column;gap:12px;margin-bottom:12px;font-size:12px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:var(--muted);font-weight:600;white-space:nowrap">Height:</span>
-        <input type="range" id="headerHeightPct" min="4" max="20" value="8" step="0.5"
-          style="flex:1" oninput="saveHeaderPct(this.value)">
-        <span id="headerHeightPctLbl" style="color:var(--text);font-weight:700;min-width:36px">8%</span>
+
+    <!-- LOTTO SLIDE -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="toggle" id="lottoSlideToggle" onclick="toggleLottoSlide()"></div>
+        <span style="font-size:12px;font-weight:700;color:var(--text)">🎰 Lotto Jackpots Slide</span>
+        <button class="btn btn-sec btn-sm" id="lottoSlideRefreshBtn" onclick="refreshLottoData()" style="display:none;margin-left:auto">🔄 Refresh</button>
+        <button class="btn btn-primary btn-sm" onclick="showSlideNow('lotto')" style="margin-left:auto">▶ Show Now</button>
       </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:var(--muted);font-weight:600;white-space:nowrap">Background:</span>
-        <input type="color" id="headerBgColor" value="#000000" oninput="saveHeaderBg(this.value)" style="width:44px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0">
-        <span id="headerBgColorVal" style="font-size:12px;color:var(--muted);font-family:monospace">#000000</span>
-        <button class="btn btn-sec btn-sm" onclick="document.getElementById('headerBgColor').value='#000000';saveHeaderBg('#000000')">Reset</button>
-      </div>
-      <!-- Promo slots -->
-      <div style="border-top:1px solid var(--border);padding-top:12px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Promo Images (up to 5)</div>
-        <div id="headerPromoSlots" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="lottoSlideOptions" style="display:none;font-size:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:var(--muted);font-weight:600;white-space:nowrap">Display for:</span>
+          <input type="number" id="lottoSlideDuration" min="3" max="300" value="10" style="width:60px" onkeydown="event.stopPropagation()">
+          <span style="color:var(--muted)">seconds</span>
+        </div>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="btn btn-sec" onclick="closePromoDisplayModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="savePromo()">Save</button>
+
+    <!-- AD SLIDES -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="toggle" id="adSlideToggle" onclick="toggleAdSlide()"></div>
+        <span style="font-size:12px;font-weight:700;color:var(--text)">📸 Ad Images Slide</span>
+        <button class="btn btn-primary btn-sm" onclick="showSlideNow('ad')" style="margin-left:auto">▶ Show Now</button>
+      </div>
+      <div id="adSlideOptions" style="display:none;font-size:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="color:var(--muted);font-weight:600;white-space:nowrap">Display for:</span>
+          <input type="number" id="adSlideDuration" min="3" max="300" value="20" style="width:60px" onkeydown="event.stopPropagation()">
+          <span style="color:var(--muted)">seconds</span>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:10px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Promo Images (up to 5)</div>
+          <div id="headerPromoSlots" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+      </div>
     </div>
+
   </div>
 
-  <!-- BANNER TAB -->
-  <div id="pdPanel-promo">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <div class="toggle" id="lottoToggle" onclick="toggleLotto()"></div>
-      <span id="lottoToggleLbl" style="font-size:12px;color:var(--muted)">Lotto jackpots disabled</span>
-      <div style="flex:1"></div>
-      <button class="btn btn-sec btn-sm" id="lottoRefreshBtn" onclick="refreshLottoData()" style="display:none">🔄 Refresh</button>
-    </div>
-    <div id="lottoPositionRow" style="display:none;flex-direction:column;gap:8px;margin-bottom:12px;font-size:12px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:var(--muted);font-weight:600">Position:</span>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="lottoPos" value="top" checked onchange="saveLottoPos(this.value)"> Top</label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="lottoPos" value="bottom" onchange="saveLottoPos(this.value)"> Bottom</label>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="color:var(--muted);font-weight:600;white-space:nowrap">Banner height:</span>
-        <input type="range" id="lottoBannerPct" min="8" max="25" value="16" step="0.5"
-          style="flex:1" oninput="saveLottoPct(this.value)">
-        <span id="lottoBannerPctLbl" style="color:var(--text);font-weight:700;min-width:36px">11.5%</span>
-      </div>
-    </div>
-
-    <div class="btn-row">
-      <button class="btn btn-sec" onclick="closePromoDisplayModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="savePromo()">Save</button>
-    </div>
-  </div>
-
-  <!-- AD DISPLAY TAB -->
-  <div id="pdPanel-ad" style="display:none">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <div class="fg">
-        <label>Toggle Key Sequence (letters only, e.g. "ad")</label>
-        <input type="text" class="ad-key-input" id="adToggleKey" placeholder="e.g. ad" maxlength="6"
-          onkeydown="event.stopPropagation()"
-          oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toLowerCase()">
-        <div style="font-size:10px;color:var(--dim);margin-top:4px">Type letters quickly in sequence on display to toggle. Any mouse move exits ad mode.</div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="toggle-row" style="margin:0">
-          <div class="toggle" id="adSlideshowToggle" onclick="toggleAdSlideshow()"></div>
-          <span style="font-size:12px;color:var(--muted)" id="adSlideshowLbl">Single screen</span>
-        </div>
-        <div class="fg" style="margin:0">
-          <label>Time per screen (seconds)</label>
-          <input type="number" id="adDuration" min="1" max="120" value="8" style="width:80px" onkeydown="event.stopPropagation()">
-        </div>
-      </div>
-    </div>
-    <div class="ad-layout">
-      <div class="ad-sidebar">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Screens</div>
-        <div class="ad-screen-list" id="adScreenList"></div>
-        <button class="btn btn-sec btn-sm" onclick="addAdScreen()">+ Add Screen</button>
-        <hr style="border-color:var(--border);margin:4px 0">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Add Media</div>
-        <div class="up-area" onclick="document.getElementById('adImgUpload').click()" style="padding:10px;font-size:11px">
-          📸 Upload Image / GIF
-          <input type="file" id="adImgUpload" accept="image/*" multiple hidden onchange="onAdImgUpload(event)">
-        </div>
-        <div id="adUploadedList" style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto;margin-top:6px"></div>
-      </div>
-      <div class="ad-canvas-wrap">
-        <div class="ad-toolbar" id="adToolbar">
-          <span style="font-size:11px;color:var(--muted)">Layouts:</span>
-          <button class="layout-btn" onclick="applyAdLayout('full')">⬛ Full</button>
-          <button class="layout-btn" onclick="applyAdLayout('split-h')">⬛⬛ Side by Side</button>
-          <button class="layout-btn" onclick="applyAdLayout('split-v')">Split Top/Bottom</button>
-          <button class="layout-btn" onclick="applyAdLayout('grid')">Grid 2×2</button>
-          <button class="layout-btn" onclick="applyAdLayout('featured')">Featured + 2</button>
-          <span style="flex:1"></span>
-          <button class="layout-btn" style="color:var(--danger);border-color:#6a1a1a" onclick="removeSelectedAdItem()">✕ Remove</button>
-        </div>
-        <div class="ad-canvas" id="adCanvas"></div>
-        <div class="ad-props" id="adProps" style="display:none">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div><div style="margin-bottom:3px">X position</div><input type="range" id="adPropX" min="0" max="95" oninput="updateAdItemProp('x',this.value)"></div>
-            <div><div style="margin-bottom:3px">Y position</div><input type="range" id="adPropY" min="0" max="95" oninput="updateAdItemProp('y',this.value)"></div>
-            <div><div style="margin-bottom:3px">Width</div><input type="range" id="adPropW" min="5" max="100" oninput="updateAdItemProp('w',this.value)"></div>
-            <div><div style="margin-bottom:3px">Height</div><input type="range" id="adPropH" min="5" max="100" oninput="updateAdItemProp('h',this.value)"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-sec btn-sm" onclick="previewAdScreen()">👁 Preview on Display</button>
-      <div style="flex:1"></div>
-      <button class="btn btn-sec" onclick="closePromoDisplayModal()">Close</button>
-      <button class="btn btn-primary" onclick="saveAdConfig()">Save Ad Config</button>
-    </div>
+  <div class="btn-row">
+    <button class="btn btn-sec" onclick="closePromoDisplayModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveSlideshow()">Save</button>
   </div>
 </div>
 </div>
@@ -1796,77 +1730,86 @@ setInterval(()=>{
 
 // ── PROMO ─────────────────────────────────────────────────
 let tmpPromoImg=null;
-function openPromoDisplayModal(tab='promo'){
+function openPromoDisplayModal(){
   tmpPromoImg=null;
-  // Lotto toggle state
-  const lottoOn=promoData.lottoEnabled||false;
-  const lottoTog=document.getElementById('lottoToggle');
-  if(lottoTog) lottoTog.className='toggle'+(lottoOn?' on':'');
-  const lottoLbl=document.getElementById('lottoToggleLbl');
-  if(lottoLbl) lottoLbl.textContent=lottoOn?'Lotto jackpots enabled':'Lotto jackpots disabled';
-  const lottoPos=document.getElementById('lottoPositionRow');
-  if(lottoPos) lottoPos.style.display=lottoOn?'flex':'none';
-  const lottoRefresh=document.getElementById('lottoRefreshBtn');
-  if(lottoRefresh) lottoRefresh.style.display=lottoOn?'inline-block':'none';
-  const pos=promoData.lottoPosition||'top';
-  document.querySelectorAll('input[name="lottoPos"]').forEach(r=>{r.checked=r.value===pos;});
-  const pct=promoData.lottoBannerPct||16;
-  const slider=document.getElementById('lottoBannerPct');
-  if(slider){slider.value=pct;document.getElementById('lottoBannerPctLbl').textContent=pct+'%';}
-  // Header toggle state
-  const headerOn=promoData.headerEnabled||false;
-  const headerTog=document.getElementById('headerToggle');
-  if(headerTog) headerTog.className='toggle'+(headerOn?' on':'');
-  const headerLbl=document.getElementById('headerToggleLbl');
-  if(headerLbl) headerLbl.textContent=headerOn?'Header enabled':'Header disabled';
-  const headerOpts=document.getElementById('headerOptionsRow');
-  if(headerOpts) headerOpts.style.display=headerOn?'flex':'none';
+  const on=promoData.slideshowEnabled||false;
+  setToggle('slideshowToggle',on);
+  document.getElementById('slideshowToggleLbl').textContent=on?'Slideshow enabled':'Slideshow disabled';
+  document.getElementById('slideshowOptions').style.display=on?'block':'none';
+
   const hPct=promoData.headerHeightPct||8;
-  const hSlider=document.getElementById('headerHeightPct');
-  if(hSlider){hSlider.value=hPct;document.getElementById('headerHeightPctLbl').textContent=hPct+'%';}
-  const hBg=promoData.headerBg||'#000000';
-  const hBgEl=document.getElementById('headerBgColor');
-  if(hBgEl){hBgEl.value=hBg;document.getElementById('headerBgColorVal').textContent=hBg;}
+  document.getElementById('slideshowHeightPct').value=hPct;
+  document.getElementById('slideshowHeightPctLbl').textContent=hPct+'%';
+  document.getElementById('slideshowBgColor').value=promoData.headerBg||'#000000';
+
+  const lottoOn=promoData.lottoSlideEnabled||false;
+  setToggle('lottoSlideToggle',lottoOn);
+  document.getElementById('lottoSlideOptions').style.display=lottoOn?'block':'none';
+  document.getElementById('lottoSlideRefreshBtn').style.display=lottoOn?'':'none';
+  document.getElementById('lottoSlideDuration').value=promoData.lottoSlideDuration||10;
+  if(lottoOn && !promoData.lottoData) refreshLottoData();
+
+  const adOn=promoData.adSlideEnabled||false;
+  setToggle('adSlideToggle',adOn);
+  document.getElementById('adSlideOptions').style.display=adOn?'block':'none';
+  document.getElementById('adSlideDuration').value=promoData.adSlideDuration||20;
+
   renderHeaderPromoSlots();
-  switchPdTab(tab);
   document.getElementById('promoDisplayModal').style.display='flex';
 }
 function closePromoDisplayModal(){document.getElementById('promoDisplayModal').style.display='none';tmpPromoImg=null;}
 
-function toggleLotto(){
-  const tog=document.getElementById('lottoToggle');
-  const on=!tog.classList.contains('on');
-  tog.className='toggle'+(on?' on':'');
-  document.getElementById('lottoToggleLbl').textContent=on?'Lotto jackpots enabled':'Lotto jackpots disabled';
-  document.getElementById('lottoPositionRow').style.display=on?'flex':'none';
-  document.getElementById('lottoRefreshBtn').style.display=on?'inline-block':'none';
-  promoData.lottoEnabled=on;
+function setToggle(id,on){const el=document.getElementById(id);if(el)el.className='toggle'+(on?' on':'');}
+function isToggleOn(id){const el=document.getElementById(id);return el&&el.classList.contains('on');}
+
+function toggleSlideshow(){
+  const on=!isToggleOn('slideshowToggle');
+  setToggle('slideshowToggle',on);
+  document.getElementById('slideshowToggleLbl').textContent=on?'Slideshow enabled':'Slideshow disabled';
+  document.getElementById('slideshowOptions').style.display=on?'block':'none';
+}
+function toggleLottoSlide(){
+  const on=!isToggleOn('lottoSlideToggle');
+  setToggle('lottoSlideToggle',on);
+  document.getElementById('lottoSlideOptions').style.display=on?'block':'none';
+  document.getElementById('lottoSlideRefreshBtn').style.display=on?'':'none';
   if(on && !promoData.lottoData) refreshLottoData();
-  savePromoLS();
-  localStorage.setItem('lotteryApp_updated',Date.now()+'');
 }
-
-function savePromoPos(val){
-  promoData.promoPosition=val;
-  savePromoLS();
-  localStorage.setItem('lotteryApp_updated',Date.now()+'');
+function toggleAdSlide(){
+  const on=!isToggleOn('adSlideToggle');
+  setToggle('adSlideToggle',on);
+  document.getElementById('adSlideOptions').style.display=on?'block':'none';
 }
-function saveLottoPos(val){
-  promoData.lottoPosition=val;
-  savePromoLS();
-  localStorage.setItem('lotteryApp_updated',Date.now()+'');
+function saveSlideshowPct(v){
+  const n=parseFloat(v);
+  document.getElementById('slideshowHeightPctLbl').textContent=n.toFixed(1)+'%';
 }
-
-function saveLottoPct(val){
-  const n=parseFloat(val);
-  promoData.lottoBannerPct=n;
-  document.getElementById('lottoBannerPctLbl').textContent=n+'%';
+function showSlideNow(type){
+  promoData.slideshowForceSlide=type;
+  promoData.slideshowForceAt=Date.now();
   savePromoLS();
-  localStorage.setItem('lotteryApp_updated',Date.now()+'');
+  toast('▶ Showing '+(type==='lotto'?'lotto jackpots':'ad images')+' now on display','ok');
 }
+function saveSlideshow(){
+  promoData.slideshowEnabled=isToggleOn('slideshowToggle');
+  promoData.headerEnabled=promoData.slideshowEnabled;
+  promoData.headerHeightPct=parseFloat(document.getElementById('slideshowHeightPct').value)||8;
+  promoData.headerBg=document.getElementById('slideshowBgColor').value||'#000000';
+  promoData.lottoSlideEnabled=isToggleOn('lottoSlideToggle');
+  promoData.lottoEnabled=promoData.lottoSlideEnabled;
+  promoData.lottoSlideDuration=parseInt(document.getElementById('lottoSlideDuration').value)||10;
+  promoData.adSlideEnabled=isToggleOn('adSlideToggle');
+  promoData.adSlideDuration=parseInt(document.getElementById('adSlideDuration').value)||20;
+  savePromoLS();
+  closePromoDisplayModal();
+  toast('Slideshow saved','ok');
+}
+function openPromoModal(){openPromoDisplayModal();}
+function closePromoModal(){closePromoDisplayModal();}
+function saveHeaderBg(val){promoData.headerBg=val;savePromoLS();}
 
 async function refreshLottoData(){
-  const btn=document.getElementById('lottoRefreshBtn');
+  const btn=document.getElementById('lottoSlideRefreshBtn');
   if(btn){btn.textContent='⏳ Fetching...';btn.disabled=true;}
   try{
     const res=await fetch('/api/tlc/draw');
@@ -1880,35 +1823,6 @@ async function refreshLottoData(){
     } else { toast('Could not fetch lotto data','err'); }
   }catch(e){ toast('Server not reachable','err'); }
   if(btn){btn.textContent='🔄 Refresh';btn.disabled=false;}
-}
-function openPromoModal(){openPromoDisplayModal('promo');}
-function closePromoModal(){closePromoDisplayModal();}
-function switchPdTab(tab){
-  ['promo','header','ad'].forEach(t=>{
-    const tabEl=document.getElementById('pdTab-'+t);
-    const panelEl=document.getElementById('pdPanel-'+t);
-    if(tabEl) tabEl.className='rpt-tab'+(t===tab?' active':'');
-    if(panelEl) panelEl.style.display=t===tab?'block':'none';
-  });
-}
-function savePromo(){
-  savePromoLS(); closePromoDisplayModal(); toast('Promo saved','ok');
-}
-
-function toggleHeader(){
-  const on=!(promoData.headerEnabled||false);
-  promoData.headerEnabled=on;
-  document.getElementById('headerToggle').classList.toggle('on',on);
-  document.getElementById('headerToggleLbl').textContent=on?'Header enabled':'Header disabled';
-  document.getElementById('headerOptionsRow').style.display=on?'flex':'none';
-  if(on) renderHeaderPromoSlots();
-  savePromoLS();
-}
-function saveHeaderBg(val){
-  promoData.headerBg=val;
-  const lbl=document.getElementById('headerBgColorVal');
-  if(lbl) lbl.textContent=val;
-  savePromoLS();
 }
 
 async function renderHeaderPromoSlots(){

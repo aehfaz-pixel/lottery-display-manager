@@ -1,6 +1,6 @@
 {
   "name": "lottery-electron",
-  "version": "1.0.1",
+  "version": "1.0.16",
   "description": "Lottery Manager — Electron App",
   "author": "Lottery Manager",
   "main": "main.js",
@@ -8,7 +8,8 @@
     "start": "electron .",
     "dev": "set NODE_ENV=development && electron .",
     "rebuild-hid": "electron-rebuild -f -w uiohook-napi",
-    "build": "electron-builder"
+    "build": "electron-builder --publish always && node fix-release.js",
+    "release": "npm version patch --no-git-tag-version && node sync-version.js && electron-builder --publish always && node fix-release.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
@@ -22,7 +23,7 @@
   },
   "build": {
     "appId": "com.lottery.manager",
-    "productName": "Lottery Manager",
+    "productName": "Lottery-Manager",
     "files": [
       "main.js",
       "preload.js",
@@ -43,7 +44,8 @@
       "provider": "github",
       "owner": "aehfaz-pixel",
       "repo": "lottery-display-manager",
-      "private": true
+      "private": false,
+      "releaseType": "release"
     }
   }
 }

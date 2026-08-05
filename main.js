@@ -7,12 +7,30 @@ const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 // ── AUTO UPDATER ──────────────────────────────────────────
-autoUpdater.autoDownload = true;        // download silently in background
-autoUpdater.autoInstallOnAppQuit = false; // we control when to install
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
+
+autoUpdater.on('checking-for-update', () => {
+  console.log('[updater] Checking for update...');
+});
 
 autoUpdater.on('update-available', (info) => {
   console.log('[updater] Update available:', info.version);
   notifyRenderer('update-available', { version: info.version });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('[updater] No update available. Current:', app.getVersion(), 'Latest on server:', info && info.version);
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  console.log('[updater] Progress:', Math.round(progress.percent) + '%');
+  notifyRenderer('update-progress', {
+    percent: Math.round(progress.percent),
+    bytesPerSecond: progress.bytesPerSecond,
+    transferred: progress.transferred,
+    total: progress.total,
+  });
 });
 
 autoUpdater.on('update-downloaded', (info) => {
@@ -21,11 +39,12 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-  console.error('[updater] Error:', err.message);
+  console.error('[updater] ERROR:', err.message, err.stack);
+  notifyRenderer('update-error', { message: err.message });
 });
 
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall(false, true);
+  autoUpdater.quitAndInstall(true, true);
 });
 
 let mainWindow = null;
@@ -135,11 +154,27 @@ function uiohookKeyToChar(e) {
   return null;
 }
 
+const LOTTERY_PREFIX = '~';  // Scanner 1 programmed with this prefix
+
 function dispatchScan(code) {
   console.log('[hook] Scan:', code);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('barcode', code);
-    // Bring manager forward if it's a non-lottery barcode (manager decides & tells us)
+
+  // Prefix routing: lottery scanner sends ~ prefix — strip it and route to manager
+  if (code.startsWith(LOTTERY_PREFIX)) {
+    const cleanCode = code.slice(LOTTERY_PREFIX.length);
+    console.log('[hook] Lottery scanner:', cleanCode);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('barcode', cleanCode);
+    }
+    return;
+  }
+
+  // No prefix — Scanner 2 or keyboard. Route to manager only if not paused.
+  // Keystrokes already flowed to Windows naturally (uiohook doesn't suppress).
+  if (!capturePaused) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('barcode', code);
+    }
   }
 }
 
@@ -174,16 +209,23 @@ function createMainWindow() {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
-  // Check for updates 5 seconds after launch (give app time to settle)
-  setTimeout(() => {
-    try { autoUpdater.checkForUpdates(); } catch(e) { console.warn('[updater]', e.message); }
-  }, 5000);
 }
 
 function createDisplayWindow() {
+  const { screen } = require('electron');
+  const displays = screen.getAllDisplays();
+  const externalDisplay = displays.find(d => d.id !== screen.getPrimaryDisplay().id);
+  const targetDisplay = externalDisplay || screen.getPrimaryDisplay();
+
   displayWindow = new BrowserWindow({
-    width: 1280, height: 720, title: '📺 Lottery Display', backgroundColor: '#050008',
-    autoHideMenuBar: true,   // hide File/Edit/View bar
+    x: targetDisplay.bounds.x,
+    y: targetDisplay.bounds.y,
+    width: targetDisplay.bounds.width,
+    height: targetDisplay.bounds.height,
+    title: '📺 Lottery Display',
+    backgroundColor: '#050008',
+    autoHideMenuBar: true,
+    fullscreen: !!externalDisplay, // fullscreen only if on second monitor
     webPreferences: {
       nodeIntegration: false, contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -199,7 +241,16 @@ function createDisplayWindow() {
     } else if (input.type === 'keyDown' && input.key === 'Escape' && displayWindow.isFullScreen()) {
       displayWindow.setFullScreen(false);
       event.preventDefault();
+    } else if (input.type === 'keyDown' && input.key === 'I' && input.control && input.shift) {
+      displayWindow.webContents.openDevTools({ mode: 'detach' });
+      event.preventDefault();
+    } else if (input.type === 'keyDown' && input.key === 'F12') {
+      displayWindow.webContents.openDevTools({ mode: 'detach' });
+      event.preventDefault();
     }
+  });
+  displayWindow.webContents.on('context-menu', () => {
+    displayWindow.webContents.openDevTools({ mode: 'detach' });
   });
   displayWindow.loadURL(`http://localhost:${SERVER_PORT}/lottery-display.html`);
   displayWindow.on('closed', () => { displayWindow = null; });
@@ -238,6 +289,10 @@ app.whenReady().then(() => {
   waitForServer(() => {
     createMainWindow();
     setTimeout(startKeyHook, 1500);
+    setTimeout(() => {
+      console.log('[updater] Triggering checkForUpdates. App version:', app.getVersion());
+      autoUpdater.checkForUpdates().catch(err => console.error('[updater] checkForUpdates threw:', err));
+    }, 5000);
   });
 });
 
