@@ -734,8 +734,8 @@ let _idbReady=null;
 function openImgDB(){
   if(_idbReady) return _idbReady;
   _idbReady=new Promise((res,rej)=>{
-    const req=indexedDB.open(_MGR_IMG_DB,1);
-    req.onupgradeneeded=e=>e.target.result.createObjectStore(_MGR_IMG_STORE);
+    const req=indexedDB.open(_MGR_IMG_DB,2);
+    req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains(_MGR_IMG_STORE))e.target.result.createObjectStore(_MGR_IMG_STORE);};
     req.onsuccess=e=>res(e.target.result);
     req.onerror=e=>rej(e.target.error);
   });
@@ -1721,6 +1721,17 @@ function pushToDisplay(){
 }
 // Auto-push every 10 seconds silently
 setInterval(()=>{
+  // Staleness guard: if storage has a different slot count than we have in memory,
+  // something else (e.g. a backup import) changed it — reload fresh instead of clobbering it.
+  try{
+    const stored=loadSlots();
+    if(stored.slots.length!==slotsData.slots.length){
+      slotsData=stored;
+      db=loadDB();
+      warmImgCache().then(()=>{enrichSlots();renderGrid();if(selectedSlot!==null)renderSidebar();});
+      return;
+    }
+  }catch(e){}
   enrichSlots(); saveSlots();
   renderGrid();
   if(selectedSlot!==null) renderSidebar();
@@ -1861,8 +1872,8 @@ async function renderHeaderPromoSlots(){
 const PROMO_IMG_PREFIX='headerPromo_';
 function idbPromo(){
   return new Promise((res,rej)=>{
-    const req=indexedDB.open('lotteryImages',1);
-    req.onupgradeneeded=e=>e.target.result.createObjectStore('images');
+    const req=indexedDB.open('lotteryImages',2);
+    req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('images'))e.target.result.createObjectStore('images');};
     req.onsuccess=e=>res(e.target.result);
     req.onerror=rej;
   });

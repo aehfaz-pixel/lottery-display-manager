@@ -30,10 +30,12 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.17
-- **Status:** ✅ Fully working — build, publish, and auto-update pipeline all confirmed functional end-to-end.
-- **Git:** Repo initialized, tracked, pushed to `origin/main`. Baseline verified-working commit: `d17bc26` ("add pre-release safety check + changelog"), followed by the v1.0.17 release.
-- **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version. All tested live.
+- **Version:** v1.0.29
+- **Status:** ✅ Fully working — build, publish, auto-update, full-backup-import, AND promo image storage all confirmed functional end-to-end, tested on multiple fresh devices and via auto-update on existing installs.
+- **Git:** Repo initialized, tracked, pushed to `origin/main`.
+- **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version. Tested on 2 separate devices via real auto-update (not just fresh install).
+- **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data (slots, inventory, DB, sales log, etc.) — verified with 86 real slots on 2 separate fresh devices.
+- **Promo/header image upload confirmed:** fixed a separate IndexedDB versioning bug (see §6.6) that was silently breaking image upload slots on fresh profiles.
 
 ---
 
@@ -209,6 +211,74 @@ Must be set in Windows User Variables for GitHub publish to work from this build
 - `node_modules already used by electron-builder` warning about `electron-rebuild` — harmless, cosmetic, ignore.
 - Old GitHub releases (e.g. v1.0.9) left published without the update bar UI — harmless historical artifacts, just don't mark them "Latest."
 
+## 6.5. Full backup import — CRITICAL, READ CAREFULLY
+
+**This bug took an entire multi-hour debugging session (v1.0.6 through v1.0.27) to fully resolve. Understand it before touching import/restore code.**
+
+### The symptom
+Importing a `.lotterybackup` file worked perfectly on one long-lived device but silently lost data (specifically `lotteryApp_slots`, sometimes everything) on every freshly-installed device, no matter how the file was transferred (USB, email) or how large it was.
+
+### Red herrings ruled out (in order investigated — don't waste time re-testing these)
+- **File corruption in transfer** — ruled out; file sizes and content matched byte-for-byte via direct inspection.
+- **Storage quota exceeded** — ruled out; total localStorage usage was ~1.9MB, nowhere near the 5-10MB browser limit.
+- **Manager tab's 10-second auto-push interval clobbering fresh data with stale in-memory state** — a real secondary risk (now mitigated with a staleness guard in `lottery-manager.html`'s interval), but NOT the primary cause.
+- **Iframe-level page reload not fully destroying old JS contexts** — addressed by switching from `window.location.reload()` to a true `mainWindow.loadURL()` triggered via IPC (`full-window-reload`), then further hardened to a full `app.relaunch()` process restart (`app-restart-for-import`). Improved robustness but did NOT fix the core bug.
+- **Chromium `localStorage` flush timing not completing before process restart** — extensively tested with increasing delays (300ms → 2500ms) and `session.flushStorageData()`. Did NOT fix it — because the real bug was elsewhere entirely.
+- **Missing persistent session partition** — a REAL secondary bug that was fixed (see below) but not the cause of THIS specific symptom.
+- **Device-specific hardware/Windows version issue** — ruled out conclusively when the bug reproduced on the developer's own build machine with a wiped fresh profile.
+
+### The REAL root cause
+A **double-JSON-encoding bug** in the file-based import staging mechanism (added in v1.0.24+ as a more reliable alternative to trusting browser storage flush timing):
+
+```js
+// BUG (main.js): backupData arrives via IPC already as a JSON.stringify'd string.
+// Calling JSON.stringify() on it AGAIN wraps the entire JSON text as one big string-within-a-string.
+ipcMain.on('stage-import-data', (_e, backupData) => {
+  fs.writeFileSync(PENDING_IMPORT_PATH, JSON.stringify(backupData)); // ❌ double-encoded
+});
+```
+
+On the next app launch, `JSON.parse(raw)` in the renderer only unwraps ONE layer of encoding, yielding back the *original JSON text as a plain string* instead of an object. `Object.entries()` on a string then iterates every individual **character** as a fake numeric key (`"0": "{", "1": "\"", "2": "v", ...`). For a ~2.5MB backup, this produced **2,523,956 fake single-character "keys"**, none of which were real data — explaining both the severe multi-second hang (2.5 million `localStorage.setItem` calls) and the complete data loss (none of the real keys like `lotteryApp_slots` ever got set).
+
+### The fix
+```js
+// main.js — write the already-stringified data directly, no double-encoding:
+ipcMain.on('stage-import-data', (_e, backupData) => {
+  fs.writeFileSync(PENDING_IMPORT_PATH, backupData); // ✅ correct
+});
+```
+
+### Why this was so hard to find
+Every earlier fix attempt (persistence partition, process restart, flush delays) was solving *real but secondary* issues that made the symptom slightly different each time, without addressing the actual corruption — which only became visible once structured file-based debug logging (`import-debug.log` in `%APPDATA%\lottery-electron\`) was added and showed the exact "17 keys staged → 2,523,956 keys read back" mismatch.
+
+### Current architecture (as of v1.0.27)
+1. `lottery-repository.html`'s `importFullBackup()` reads the `.lotterybackup` file, then calls `stageImportData()` to write it to a **plain disk file** (`pending-import.json` in the app's userData folder) via genuinely synchronous `fs.writeFileSync` — NOT relying on browser `localStorage` flush timing at all.
+2. It then calls `restartAppForImport()`, which flushes session storage (defensive, 2s buffer) then does a true `app.relaunch()` + `app.exit(0)` — a full process restart, not just a window/page reload.
+3. On the next launch, `lottery-app.html`'s `applyPendingImportThenStartFrames()` runs **before any tab iframe starts loading** (iframe `src` attributes are deliberately deferred via `data-src` until this completes) — it reads the staged file, applies every key to `localStorage`, and only THEN sets the iframe `src` attributes to begin loading tabs.
+4. The staged file is only deleted (`confirm-import-applied` IPC call) AFTER the renderer confirms the apply loop fully completed — so a hang or crash mid-apply leaves the file intact for automatic retry on next launch, rather than silently losing data.
+5. `import-debug.log` (plain text, timestamped) logs every step of this sequence on every launch — check it first if import issues ever recur:
+   ```
+   type "%APPDATA%\lottery-electron\import-debug.log"
+   ```
+
+### Debugging checklist if backup import ever breaks again
+1. Check `import-debug.log` first — it will show the exact staged key count vs. applied key count. A mismatch here is the #1 thing to check.
+2. Confirm `main.js`'s `stage-import-data` handler does NOT call `JSON.stringify()` on `backupData` (it arrives pre-stringified).
+3. Confirm `lottery-app.html` iframes still use `data-src` (not `src`) so they don't race ahead of the pending-import check.
+4. Test on a genuinely fresh profile (`rmdir /s /q "%APPDATA%\lottery-electron"`), not just a re-install over existing data — the bug was invisible on long-lived profiles.
+
+---
+
+## 6.6. IndexedDB image store versioning — real bug, found via manual testing
+
+**Symptom:** Promo Display had no image upload slots on a fresh install (also manifested earlier as `NotFoundError: One of the specified object stores was not found` console errors from `warmImgCache()` in Manager/Admin).
+
+**Root cause:** All lottery ticket/promo images are stored in one shared IndexedDB database (`lotteryImages`, store name `images`), opened independently from **7 different places** across `lottery-admin.html`, `lottery-manager.html` (×2), `lottery-home.html`, `lottery-display.html` (×3), and `lottery-repository.html` (×2). Most correctly created the `images` object store via `onupgradeneeded` — but `lottery-display.html`'s 3 open calls did NOT have an upgrade handler at all. IndexedDB only fires `onupgradeneeded` for the very FIRST connection that creates a database at a given version. If the Display window happened to be the first thing to ever open this database on a fresh profile (very possible — Display is often opened early to check the TV output), it silently created the database at version 1 with **no store at all**, permanently breaking every other file's access to it (since they all also requested version 1, no further upgrade would ever fire).
+
+**Fix:** Every one of the 10 `indexedDB.open(...)` call sites across all 7 files now consistently requests **version 2** with a defensive `if(!objectStoreNames.contains('images')) createObjectStore('images')` guard in `onupgradeneeded`. A repair routine (`repairImageStoreIfNeeded()` in `lottery-app.html`) also runs on every app launch, before any tab loads, to fix any already-broken existing profile automatically — no manual wipe needed for stores that were affected before this fix shipped.
+
+**Lesson for future IDB/storage changes:** when multiple files share one IndexedDB database, EVERY open call must use the identical version number and have a matching `onupgradeneeded` handler — a single inconsistent file silently poisons the schema for the entire app, and the bug won't be visible until whichever file happens to connect first varies by user behavior.
+
 ---
 
 ## 10. Release Log (running — update every release)
@@ -276,4 +346,19 @@ Format for each entry:
 <!--
 ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
 Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
+
+### v1.0.24 — 2026-08-06
+**Change:** Root-caused and fixed the backup-import data loss bug: a double-JSON-encoding error in the file-based import staging mechanism (`main.js`'s `stage-import-data` handler was calling `JSON.stringify()` on data that was already stringified). Confirmed via `import-debug.log` showing 17 real keys staged but 2,523,956 fake single-character "keys" read back after `Object.entries()` iterated over a giant string instead of an object.
+**Result:** ✅ Success — this was the actual root cause after 5 earlier fix attempts (v1.0.19–1.0.23) addressed real-but-secondary issues (session persistence partition, process restart robustness, storage flush timing) without fixing the core bug.
+**Files touched:** main.js
+
+### v1.0.28 — 2026-08-06
+**Change:** Cleaned up debug alert popups and redundant immediate-write code in `lottery-repository.html`'s import function, now that the file-staging + restart flow is the sole reliable mechanism. Documented the entire bug saga in this file (§6.5).
+**Result:** ✅ Success — verified clean import (no debug alerts, correct data) on 2 independently fresh devices.
+**Files touched:** lottery-repository.html, PROJECT_STATUS.md
+
+### v1.0.29 — 2026-08-06
+**Change:** Fixed a separate real bug found via manual testing: Promo Display had no image upload slots. Root cause was `lottery-display.html`'s 3 `indexedDB.open('lotteryImages', 1)` calls missing an `onupgradeneeded` handler — if Display connected first on a fresh profile, it silently created the shared image database without its `images` object store, permanently breaking image storage for the whole app (since no further upgrade would ever fire at the same version). Fixed by bumping ALL 10 open-call sites across 7 files to version 2, each with a defensive `objectStoreNames.contains()` guard, plus an automatic startup repair routine for already-broken existing profiles.
+**Result:** ✅ Success — verified promo image upload works on the previously-broken device (via the automatic repair, no manual wipe needed) and confirmed auto-update still works correctly on 2 devices after this fix.
+**Files touched:** lottery-admin.html, lottery-home.html, lottery-manager.html, lottery-display.html, lottery-repository.html, lottery-app.html
 -->

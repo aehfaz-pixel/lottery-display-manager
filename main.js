@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, session } = require('electron');
 // Disable HTTP cache so updated HTML files always load fresh
 app.commandLine.appendSwitch('disable-http-cache');
 const path = require('path');
+const fs = require('fs');
 const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
@@ -202,6 +203,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false, contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      partition: 'persist:lottery-manager',
     },
   });
   mainWindow.loadURL(`http://localhost:${SERVER_PORT}/lottery-app.html`);
@@ -229,6 +231,7 @@ function createDisplayWindow() {
     webPreferences: {
       nodeIntegration: false, contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      partition: 'persist:lottery-manager',
     },
   });
   displayWindow.setMenuBarVisibility(false);  // ensure it's gone, not just auto-hidden
@@ -263,6 +266,74 @@ ipcMain.handle('open-display', () => {
 });
 
 // Manager asks us to bring it to front (non-lottery barcode alert)
+ipcMain.on('full-window-reload', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.session.flushStorageData();
+    setTimeout(() => {
+      mainWindow.loadURL(`http://localhost:${SERVER_PORT}/lottery-app.html`);
+    }, 500);
+  }
+});
+
+const DEBUG_LOG_PATH = path.join(app.getPath('userData'), 'import-debug.log');
+function debugLog(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  console.log(line.trim());
+  try { fs.appendFileSync(DEBUG_LOG_PATH, line); } catch (e) {}
+}
+debugLog(`=== APP LAUNCH === version ${app.getVersion()}`);
+
+const PENDING_IMPORT_PATH = path.join(app.getPath('userData'), 'pending-import.json');
+
+ipcMain.on('stage-import-data', (_e, backupData) => {
+  try {
+    fs.writeFileSync(PENDING_IMPORT_PATH, backupData);
+    debugLog(`STAGED import data to disk, size: ${backupData.length}`);
+  } catch (e) {
+    debugLog(`STAGE FAILED: ${e.message}`);
+  }
+});
+
+ipcMain.handle('read-pending-import', () => {
+  try {
+    if (fs.existsSync(PENDING_IMPORT_PATH)) {
+      const data = fs.readFileSync(PENDING_IMPORT_PATH, 'utf8');
+      debugLog(`READ pending import, size: ${data.length}`);
+      return data;
+    }
+    debugLog('READ pending import: no file found');
+  } catch (e) {
+    debugLog(`READ FAILED: ${e.message}`);
+  }
+  return null;
+});
+
+ipcMain.on('confirm-import-applied', () => {
+  try {
+    if (fs.existsSync(PENDING_IMPORT_PATH)) {
+      fs.unlinkSync(PENDING_IMPORT_PATH);
+      debugLog('CONFIRMED applied — pending file removed.');
+    }
+  } catch (e) {
+    debugLog(`CONFIRM/DELETE FAILED: ${e.message}`);
+  }
+});
+
+ipcMain.on('debug-log', (_e, msg) => debugLog(`[renderer] ${msg}`));
+
+ipcMain.on('app-restart-for-import', () => {
+  const doRestart = () => {
+    app.relaunch();
+    app.exit(0);
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.session.flushStorageData();
+    setTimeout(doRestart, 2000);
+  } else {
+    doRestart();
+  }
+});
+
 ipcMain.on('bring-to-front', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -299,6 +370,9 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   try { if (uIOhook) uIOhook.stop(); } catch (e) {}
   if (serverProcess) serverProcess.kill();
+  try {
+    session.fromPartition('persist:lottery-manager').flushStorageData();
+  } catch (e) { console.error('[storage] flush failed:', e.message); }
   app.quit();
 });
 

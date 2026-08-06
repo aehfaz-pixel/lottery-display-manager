@@ -23,4 +23,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_e, info) => callback(info)),
   onUpdateError: (callback) => ipcRenderer.on('update-error', (_e, info) => callback(info)),
   installUpdate: () => ipcRenderer.send('install-update'),
+  // Force a true full BrowserWindow reload (destroys all iframe JS contexts cleanly)
+  fullWindowReload: () => ipcRenderer.send('full-window-reload'),
+  restartAppForImport: () => ipcRenderer.send('app-restart-for-import'),
+  stageImportData: (data) => ipcRenderer.send('stage-import-data', data),
+  readPendingImport: () => ipcRenderer.invoke('read-pending-import'),
+  confirmImportApplied: () => ipcRenderer.send('confirm-import-applied'),
+  debugLog: (msg) => ipcRenderer.send('debug-log', msg),
 });

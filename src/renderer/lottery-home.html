@@ -149,7 +149,8 @@ let imgCache={};
 
 function openImgDB(){
   return new Promise((res,rej)=>{
-    const req=indexedDB.open(MGR_IMG_DB,1);
+    const req=indexedDB.open(MGR_IMG_DB,2);
+    req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('images'))e.target.result.createObjectStore('images');};
     req.onsuccess=e=>res(e.target.result);
     req.onerror=e=>rej(e.target.error);
   });

@@ -446,7 +446,7 @@ async function resolvePromoImages(rawPromos){
   return Promise.all(rawPromos.map(async stub=>{
     if(stub&&stub.startsWith('idb:')){
       try{
-        const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',1);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+        const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',2);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('images'))e.target.result.createObjectStore('images');};r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
         const key=stub.slice(4);
         return await new Promise((res,rej)=>{const tx=idb.transaction('images','readonly');const r=tx.objectStore('images').get(key);r.onsuccess=()=>res(r.result||stub);r.onerror=rej;});
       }catch{return stub;}
@@ -609,7 +609,7 @@ async function renderPromo(){
     const promos=await Promise.all(rawPromos.map(async stub=>{
       if(stub&&stub.startsWith('idb:')){
         try{
-          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',1);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',2);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('images'))e.target.result.createObjectStore('images');};r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
           const key=stub.slice(4);
           return await new Promise((res,rej)=>{const tx=idb.transaction('images','readonly');const r=tx.objectStore('images').get(key);r.onsuccess=()=>res(r.result||stub);r.onerror=rej;});
         }catch{return stub;}
@@ -1274,7 +1274,7 @@ async function renderAdOverlay(){
       let src=img.src||'';
       if(src.startsWith('idb:')){
         try{
-          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',1);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+          const idb=await new Promise((res,rej)=>{const r=indexedDB.open('lotteryImages',2);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('images'))e.target.result.createObjectStore('images');};r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
           const key='headerPromo_'+src.slice(4);
           src=await new Promise((res,rej)=>{const tx=idb.transaction('images','readonly');const r=tx.objectStore('images').get(key);r.onsuccess=()=>res(r.result||'');r.onerror=rej;});
         }catch{src='';}

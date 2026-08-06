@@ -508,14 +508,14 @@ try{
 }catch(e){}
 
 // ── INDEXEDDB IMAGE STORE ─────────────────────────────────
-const IMG_DB_NAME='lotteryImages',IMG_STORE='images',IMG_DB_VER=1;
+const IMG_DB_NAME='lotteryImages',IMG_STORE='images',IMG_DB_VER=2;
 const imgCache={};  // id → resolved dataUrl, warmed at startup
 let _idbReady=null;
 function openImgDB(){
   if(_idbReady) return _idbReady;
   _idbReady=new Promise((res,rej)=>{
     const req=indexedDB.open(IMG_DB_NAME,IMG_DB_VER);
-    req.onupgradeneeded=e=>e.target.result.createObjectStore(IMG_STORE);
+    req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains(IMG_STORE))e.target.result.createObjectStore(IMG_STORE);};
     req.onsuccess=e=>res(e.target.result);
     req.onerror=e=>rej(e.target.error);
   });
