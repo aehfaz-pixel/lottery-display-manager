@@ -22,6 +22,7 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 | Local project folder | `D:\Store\Lottery\lottery-electron\` |
 | Installed app (this dev machine) | `C:\Users\aehfa\AppData\Local\Programs\Lottery Manager\Lottery-Manager\Lottery-Manager.exe` |
 | Updater cache/logs (this dev machine) | `%LOCALAPPDATA%\lottery-electron-updater\` (has a `pending\` subfolder for in-progress downloads) |
+| Auto-backup folder (this dev machine) | `%APPDATA%\lottery-electron\auto-backups\` (5 most recent daily backups kept) |
 | Project knowledge (Claude project) | Should contain current copies of: `main.js`, `preload.js`, `server.js`, `package.json`, `fix-release.js`, `sync-version.js`, `pre-release-check.js`, all `src/renderer/*.html`, this file |
 
 **If project knowledge files look outdated or contradict this file, trust GitHub `main` branch over project knowledge.** Project knowledge can go stale between uploads; GitHub is always current post-push.
@@ -30,12 +31,17 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.29
-- **Status:** ✅ Fully working — build, publish, auto-update, full-backup-import, AND promo image storage all confirmed functional end-to-end, tested on multiple fresh devices and via auto-update on existing installs.
-- **Git:** Repo initialized, tracked, pushed to `origin/main`.
-- **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version. Tested on 2 separate devices via real auto-update (not just fresh install).
-- **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data (slots, inventory, DB, sales log, etc.) — verified with 86 real slots on 2 separate fresh devices.
-- **Promo/header image upload confirmed:** fixed a separate IndexedDB versioning bug (see §6.6) that was silently breaking image upload slots on fresh profiles.
+- **Version:** v1.0.33
+- **Status:** ✅ Fully working — build, publish, auto-update, full-backup-import, promo image storage, daily auto-backup, and scanner routing (Scanner 1/Scanner 2 separation + window-focus-aware Manager routing) all confirmed functional end-to-end, tested on real packaged builds.
+- **Git:** Repo tracked, pushed to `origin/main`, currently at commit `b1b0e2a`.
+- **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version.
+- **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data — verified with 86 real slots on 2 separate fresh devices, and again during the v1.0.29→v1.0.30 device migration.
+- **Promo/header image upload confirmed:** fixed a separate IndexedDB versioning bug (see §6.6).
+- **Daily auto-backup confirmed:** silently backs up on first launch each day to `auto-backups/`, keeps 5 most recent, "Open Backup Folder" button in Repository tab works.
+- **Scanner routing confirmed (see §6.7–6.9 for the bugs found getting here):**
+  - Only the `~`-prefixed lottery scanner (Scanner 1) can trigger app actions, from any source (OS-level global hook, and each tab's local browser-level fallback listener).
+  - Scanner 2 / manual keyboard input is fully ignored everywhere except when a specific input field is deliberately focused (e.g. typing into Add Inventory).
+  - When the app window itself lacks OS focus, a `~` scan always routes to Manager regardless of which shell tab happens to be selected — verified across 8 focus/tab/prefix scenarios on the real packaged v1.0.33 build.
 
 ---
 
@@ -43,7 +49,7 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ```
 D:\Store\Lottery\lottery-electron\
-├── main.js              — Electron main process, scanner hook, IPC, autoUpdater
+├── main.js              — Electron main process, scanner hook, IPC, autoUpdater, auto-backup
 ├── preload.js            — IPC bridge to renderer (exposes window.electronAPI)
 ├── server.js              — Express server (port 3000), TLC scraping, image proxy
 ├── package.json            — version, build config, electron-builder publish config, release scripts
@@ -53,12 +59,12 @@ D:\Store\Lottery\lottery-electron\
 ├── CHANGELOG.md            — Human-readable one-line-per-release log
 ├── .gitignore              — excludes node_modules/, dist/
 ├── src/renderer/
-│   ├── lottery-app.html         — Shell: 5 iframe tabs, update bar UI, theme toggle, scan routing
+│   ├── lottery-app.html         — Shell: 5 iframe tabs, update bar UI, theme toggle, scan routing (incl. window-focus check)
 │   ├── lottery-home.html        — Dashboard (stats, slot breakdown)
-│   ├── lottery-manager.html     — Main scanning/slot management
-│   ├── lottery-admin.html       — Lottery types DB + Inventory
+│   ├── lottery-manager.html     — Main scanning/slot management, Customize modal (Borders/Fonts only)
+│   ├── lottery-admin.html       — Lottery types DB + Inventory (incl. Add Inventory tilde-aware scan field)
 │   ├── lottery-display.html     — TV display (fullscreen slot grid + banner/slideshow)
-│   └── lottery-repository.html  — Reports + full backup
+│   └── lottery-repository.html  — Reports + full backup + daily auto-backup trigger
 └── dist/ (gitignored, regenerated per build) — installers, blockmaps, latest.yml
 ```
 
@@ -72,7 +78,8 @@ D:\Store\Lottery\lottery-electron\
 - `electron-updater` handles auto-updates from GitHub Releases (public repo).
 - IndexedDB stores images (lottery ticket images, ad images, header promos).
 - localStorage stores all app data (slots, inventory, sales log, settings) — see key list below.
-- Dual scanner support: Scanner 1 (lottery) programmed with `~` prefix, routed to lottery manager; Scanner 2 has no prefix, flows through to Windows/other apps normally.
+- **Dual scanner support (as of v1.0.31–33):** Scanner 1 (lottery) is programmed with a `~` prefix and is the *only* input source that can trigger app actions, from any focus state. Scanner 2 (or manual keyboard) is never routed to any app logic — it flows through to whatever else has focus, exactly like a normal keyboard, *except* when a specific input field inside the app (e.g. Add Inventory) is deliberately focused, in which case it types normally like any text field. See §6.7–6.9 for the three bugs found while building this out.
+- **Window-focus-aware routing (v1.0.33):** if the app window itself lacks OS focus when a `~` scan arrives, it always routes to Manager regardless of which shell tab was last selected — so a scan made while looking at another app never lands in a leftover Inventory/Admin tab.
 
 ### Key localStorage keys
 ```
@@ -164,6 +171,8 @@ git push origin main
 
 **Only commit verified-working states.** Do not commit if the build succeeded but the app behaves incorrectly — git history should only ever contain known-good checkpoints, so a future rollback is always trustworthy.
 
+**Note on Windows `cmd` and multi-line commit messages:** plain Command Prompt does not handle multi-line `-m "..."` strings reliably — each newline gets interpreted as a separate command once the quoted string ends up spanning lines in the terminal. Keep `-m` messages to a single line, or use `git commit --amend -m "..."` afterward if you need to fix a truncated message.
+
 ### Build environment requirement
 Must run from **VS Developer Command Prompt** (not standard cmd) — a node-gyp compatibility patch for VS 2026 is applied at `node_modules/app-builder-lib/node_modules/node-gyp/lib/find-visualstudio.js`. Standard cmd will fail native module rebuilds (`uiohook-napi`).
 
@@ -196,7 +205,7 @@ Must be set in Windows User Variables for GitHub publish to work from this build
    dir "%LOCALAPPDATA%\lottery-electron-updater\pending"
    ```
 
-5. **`npm run dev` does NOT test the updater** — dev/unpacked builds always print `Skip checkForUpdates because application is not packed and dev update config is not forced`. You must test on an actually-installed build.
+5. **`npm run dev` does NOT test the updater** — dev/unpacked builds always print `Skip checkForUpdates because application is not packed and dev update config is not forced`. You must test on an actually-installed build. **The same is true for window-focus behavior (§6.9) and auto-backup (§6.8-adjacent)** — dev mode is fine for logic checks (console logs still work), but always do a final pass on a real packaged install before considering a release truly verified.
 
 6. **Compare against last known-good git commit:**
    ```
@@ -210,6 +219,7 @@ Must be set in Windows User Variables for GitHub publish to work from this build
 - CRLF/LF warnings from git on Windows — harmless, cosmetic.
 - `node_modules already used by electron-builder` warning about `electron-rebuild` — harmless, cosmetic, ignore.
 - Old GitHub releases (e.g. v1.0.9) left published without the update bar UI — harmless historical artifacts, just don't mark them "Latest."
+- **QR-code/phone-relay scanner testing showing occasional intermittent drops** — not an app bug. The global hook's burst-detection window (`BURST_MS = 50`) requires every keystroke in a scan to land within 50ms of the previous one. A real USB scanner hits this easily; a phone app relaying over Bluetooth after optical decode sometimes doesn't, causing an occasional silently-dropped scan during testing. Re-scanning normally succeeds. This is a testing-method artifact, not something to "fix" unless the *real* Netum scanner also shows drops.
 
 ## 6.5. Full backup import — CRITICAL, READ CAREFULLY
 
@@ -281,6 +291,52 @@ Every earlier fix attempt (persistence partition, process restart, flush delays)
 
 ---
 
+## 6.7. Customize modal silently failed to open (v1.0.31 bug, fixed v1.0.31 same day)
+
+**Symptom:** After removing three unused Customize sub-tabs (Spotlight/Featured/Slot Layout), clicking "Customize" did nothing at all — no modal, no error dialog, no console output visible to the user.
+
+**Root cause:** The codebase had **two separate blocks of markup sharing `id="customizeModal"`**. One was genuinely live DOM (the full 6-tab version: Slot Tabs/Borders/Fonts/Slot Layout/Spotlight/Featured). The other was accidentally embedded **inside a JavaScript template literal string** in `lottery-manager.html`'s `openPrintWindow()` function (the report-printing code) — meaning it was never real DOM at all, not even in the original v1.0.29 source; it was always inert text sitting inside a JS string used to build a print-preview popup.
+
+The first attempt at removing the unused sub-tabs identified "the duplicate" purely by raw text order in the file — without noticing that one copy was trapped inside a `<script>` block's string content. It deleted the **genuinely live** modal (believing it was the dead duplicate) and edited the **actually-dead** one (believing it was the real, working modal). After that, `document.getElementById('customizeModal')` returned `null`, and `.style.display='flex'` on `null` threw a silent error — no modal ever appeared.
+
+**Fix:** Restored the real modal from the original v1.0.29 source, this time correctly trimmed down to just Borders + Fonts, and positioned it as genuine live DOM (outside any `<script>` block). Removed the harmless dead copy from inside `openPrintWindow()`'s template literal entirely, since it was unrelated debris with no real purpose there. Verified via static analysis that exactly one `id="customizeModal"` exists in real DOM, and zero occurrences remain inside any `<script>` block.
+
+**Lesson:** When two elements share an `id` and you need to determine which one is "the real, live one," **check whether either copy is sitting inside a `<script>` block or JS string** — text order in the file is not the same as DOM order, and a duplicate ID inside a JS template literal never counts as real DOM. `getElementById` only ever sees genuinely parsed HTML elements.
+
+---
+
+## 6.8. Tilde character never reached the scan buffer (v1.0.31 bug, fixed v1.0.31 same day)
+
+**Symptom:** After separating Scanner 1 (`~` prefix) from Scanner 2 so that only tilde-prefixed scans could trigger app actions, **no scan worked at all**, from any source — Netum scanner, phone-relay QR testing, nothing.
+
+**Root cause:** `uiohookKeyToChar()` in `main.js` (the function that translates the global OS-level key hook's raw keycodes into characters) only has mappings for digit keys and letter keys A–Z. It has no case for the backquote/tilde key at all — so every `~` keystroke returned `null` from this function, and the scan-buffer handler immediately discarded it (`if (char === null) return;`) instead of adding it to the buffer. This meant the scan buffer **never actually contained a leading `~`** — only the digits that followed it — so `dispatchScan()`'s `code.startsWith(LOTTERY_PREFIX)` check was never true for any scan, regardless of source.
+
+This bug was completely invisible before the Scanner 1/Scanner 2 separation shipped, because the old fallback logic forwarded *every* scan to Manager regardless of prefix — so a missing tilde in the buffer had zero visible effect.
+
+**Fix:** Added `if (kc === 41) return '~';` to `uiohookKeyToChar()` — keycode `41` is `KEY_GRAVE` (backquote/tilde) in the standard Linux evdev keycode scheme already used consistently by the existing digit/letter maps in this function (confirmed by the fact `digitMap`'s `2`–`11` already matches `KEY_1`–`KEY_0` exactly in that same scheme).
+
+**Lesson:** When adding any new "special" key to a hand-rolled keycode-to-character map like this one, verify the mapping against the actual underlying keycode scheme the rest of the map already uses (here: Linux evdev/`input-event-codes.h`), rather than assuming a key "just works" because it's a single visible character. Test the *specific* new key end-to-end, not just the digits/letters that were already working.
+
+---
+
+## 6.9. Scanner routing had two more gaps beyond the OS-level hook (v1.0.31→33 bugs, fixed same day)
+
+**Symptom (found during testing, not before release):** After fixing §6.8, `~`-prefixed scans worked via the global OS-level hook — but Scanner 2 (no prefix) could *still* trigger actions in Manager or Admin/Inventory under certain conditions, and a `~` scan made while looking at a different app could land in whatever tab (Admin/Inventory) happened to be selected instead of Manager.
+
+**Root cause #1 — local per-tab listeners bypassed the tilde requirement.** `lottery-manager.html` and `lottery-admin.html` each have their **own separate, local, browser-level `keydown` listener** — a fallback mechanism for when the Electron window has plain DOM focus, independent of the OS-level global hook in `main.js`. Fixing the global hook (§6.8, plus removing its old catch-all fallback) did nothing to these local listeners, since they're a completely separate code path. Neither had any tilde-awareness, so whenever the app window was genuinely focused with no specific field selected, Scanner 2's unprefixed input sailed straight through this second path.
+
+**Fix:** Both local listeners now also require and strip a leading `~` before processing, exactly matching the OS-level hook's policy.
+
+**Root cause #2 — routing was based on which tab was *selected*, not whether the app had real focus.** `lottery-app.html`'s `routeBarcode()` decided Manager vs. Admin purely by checking `activeTab` (the shell's last-selected tab) — with no awareness of whether the app window itself currently had OS focus. So a `~` scan made while looking at a completely different application would still route to Admin/Inventory if that happened to be the last tab left open in the Lottery app.
+
+**Fix:** `main.js` now checks `mainWindow.isFocused()` on every `~`-prefixed scan and passes a `forceManager` flag through IPC to the shell. If the app lacks real OS focus, the scan is forced to Manager regardless of `activeTab`. When the app has focus, original tab-based routing is unchanged. This has no double-fire risk with the local per-tab listeners from Root cause #1, since those listeners can only fire when the app genuinely has OS focus (no browser keydown events occur without window focus) — the exact opposite condition to when `forceManager` applies.
+
+**Verified via:** 8 explicit focus/tab/prefix combinations, tested on the real packaged v1.0.33 build via phone-camera QR scanning (see §9 for a note on why phone-relay testing occasionally shows dropped scans that aren't app bugs).
+
+**Lesson:** When an app has *multiple independent paths* that can trigger the same action (here: one OS-level global hook, plus one local per-tab browser listener per relevant tab), a policy change (like "require a prefix") must be applied to **every** path, not just the most obvious/first one found. Search the whole codebase for `addEventListener('keydown'` (or equivalent) rather than assuming a single central handler covers everything.
+
+---
+
 ## 10. Release Log (running — update every release)
 
 Format for each entry:
@@ -343,10 +399,6 @@ Format for each entry:
 **Result:** ✅ Success — verified the check runs automatically, passes correctly, and the full `npm run release` pipeline (check → bump → sync → build → publish) completes and produces a working, auto-updating release.
 **Files touched:** pre-release-check.js (new), package.json, PROJECT_STATUS.md (new), CHANGELOG.md (new)
 
-<!--
-ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
-Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
-
 ### v1.0.24 — 2026-08-06
 **Change:** Root-caused and fixed the backup-import data loss bug: a double-JSON-encoding error in the file-based import staging mechanism (`main.js`'s `stage-import-data` handler was calling `JSON.stringify()` on data that was already stringified). Confirmed via `import-debug.log` showing 17 real keys staged but 2,523,956 fake single-character "keys" read back after `Object.entries()` iterated over a giant string instead of an object.
 **Result:** ✅ Success — this was the actual root cause after 5 earlier fix attempts (v1.0.19–1.0.23) addressed real-but-secondary issues (session persistence partition, process restart robustness, storage flush timing) without fixing the core bug.
@@ -361,4 +413,38 @@ Also remember to bump the "Current state" section (§3) at the top of this file 
 **Change:** Fixed a separate real bug found via manual testing: Promo Display had no image upload slots. Root cause was `lottery-display.html`'s 3 `indexedDB.open('lotteryImages', 1)` calls missing an `onupgradeneeded` handler — if Display connected first on a fresh profile, it silently created the shared image database without its `images` object store, permanently breaking image storage for the whole app (since no further upgrade would ever fire at the same version). Fixed by bumping ALL 10 open-call sites across 7 files to version 2, each with a defensive `objectStoreNames.contains()` guard, plus an automatic startup repair routine for already-broken existing profiles.
 **Result:** ✅ Success — verified promo image upload works on the previously-broken device (via the automatic repair, no manual wipe needed) and confirmed auto-update still works correctly on 2 devices after this fix.
 **Files touched:** lottery-admin.html, lottery-home.html, lottery-manager.html, lottery-display.html, lottery-repository.html, lottery-app.html
+
+### v1.0.30 — 2026-08-06
+**Change:** Version-bump test release only, no code changes — used to verify the auto-update flow end-to-end on a freshly-migrated device (see device migration notes: old npm-start setup → installed v1.0.29, via backup export/import).
+**Result:** ✅ Success — update bar appeared correctly, downloaded, installed silently, relaunched at new version.
+**Files touched:** package.json, lottery-app.html (version tag only)
+
+### v1.0.31 — 2026-08-06
+**Change:**
+- Removed Spotlight/Featured/Slot Layout tabs from the Customize modal (no longer needed).
+- Removed the Slot Tabs sub-tab entirely (its label/color settings were confirmed dead — `lottery-display.html` never read them).
+- Added a daily auto-backup system: on first app launch each calendar day, silently exports a full backup (all `lotteryApp_*` localStorage keys + IndexedDB images) to `userData/auto-backups/`, keeping the 5 most recent and auto-pruning older ones. Added a new "Open Backup Folder" button in the Repository tab for manual USB copying.
+- Reworked scanner handling so Scanner 1 (`~` prefix) exclusively feeds the app; removed the old fallback that forwarded any unprefixed scan to the Manager, and removed the now-unneeded scan pause/resume hotkey system entirely.
+- Fixed the Add Inventory field truncating/rejecting tilde-prefixed scans (its `maxlength` and validation regex didn't account for the prefix character).
+
+**Result:** ⚠️ Shipped with 3 undiscovered bugs, all found via manual post-release testing the same day and fixed in v1.0.32/v1.0.33 — see §6.7, §6.8, §6.9 for full write-ups:
+1. Customize modal silently failed to open (deleted the wrong of two same-ID elements — one was inert JS-string content, not real DOM).
+2. The tilde character was never actually captured by the OS-level scan buffer at all (missing keycode mapping), so prefix-based routing never worked for *any* scan.
+3. The backup folder button and auto-backup silently failed due to `lottery-repository.html` running in an iframe without direct `window.electronAPI` access.
+
+**Files touched:** main.js, preload.js, src/renderer/lottery-app.html, src/renderer/lottery-manager.html, src/renderer/lottery-admin.html, src/renderer/lottery-repository.html
+
+### v1.0.32 — 2026-08-06
+**Change:** Fixed a real regression found during same-day testing of v1.0.31 (see §6.9, root cause #1): `lottery-manager.html` and `lottery-admin.html` each have their own local, browser-level scan listener independent of the OS-level hook in `main.js`. Neither had been updated to require the `~` prefix, so Scanner 2 could still trigger actions whenever the app window was genuinely focused. Both listeners now require and strip the tilde prefix, matching the OS-level hook's policy.
+**Result:** ✅ Success — verified via phone-camera QR scanning across multiple focus/tab combinations on the real packaged build.
+**Files touched:** src/renderer/lottery-manager.html, src/renderer/lottery-admin.html
+
+### v1.0.33 — 2026-08-06
+**Change:** Added window-focus-aware scan routing (see §6.9, root cause #2). Previously, routing between Manager and Admin/Inventory was based purely on which shell tab was last selected, regardless of whether the app window had real OS focus. `main.js` now checks `mainWindow.isFocused()` on every `~`-prefixed scan and passes a `forceManager` flag through IPC; if the app lacks OS focus, the scan is forced to Manager regardless of the selected tab. When the app has focus, original tab-based routing is unchanged, and there is no double-fire risk with the local listeners fixed in v1.0.32 (mutually exclusive focus conditions).
+**Result:** ✅ Success — verified across 8 explicit focus/tab/prefix scenarios on the real packaged build, including confirming Admin/Inventory's own scan handling and the Add Inventory field are both unaffected.
+**Files touched:** main.js, preload.js, src/renderer/lottery-app.html
+
+<!--
+ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
+Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
 -->
