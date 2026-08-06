@@ -76,7 +76,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ar
     <button class="shell-tab" data-tab="repository" onclick="switchShellTab('repository')">🗄 Repository</button>
     <div class="spacer"></div>
     <button id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
-    <span id="versionTag" style="font-size:10px;color:var(--muted);font-family:monospace;opacity:0.6;white-space:nowrap">v1.0.29</span>
+    <span id="versionTag" style="font-size:10px;color:var(--muted);font-family:monospace;opacity:0.6;white-space:nowrap">v1.0.33</span>
     <button class="shell-tab" style="border-bottom:none;background:var(--primary);color:#fff;border-radius:7px;height:32px;padding:0 14px" onclick="openDisplayWindow()">📺 Open Display</button>
     <div class="scan-pill" id="shellScanPill"><span class="dot"></span><span id="shellScanText">Scanning active</span></div>
   </div>
@@ -223,12 +223,16 @@ function switchShellTab(tab){
 // Route per the active tab:
 //   - admin or inventory tab  → admin's handleBarcode (option A: add/find lottery)
 //   - anywhere else (manager) → manager's globalBarcode
-function routeBarcode(code){
+function routeBarcode(code,forceManager){
   code=String(code||'').trim();
   const mgr=document.getElementById('frame-manager').contentWindow;
   const adm=document.getElementById('frame-admin').contentWindow;
 
-  if(activeTab==='admin'||activeTab==='inventory'){
+  // If the app window itself doesn't have OS focus (forceManager=true, set
+  // by main.js), always go to Manager — regardless of which tab happens to
+  // be selected. Only when the app genuinely has focus does the normal
+  // tab-based routing apply.
+  if(!forceManager && (activeTab==='admin'||activeTab==='inventory')){
     // Option A — admin handles the scan in its own way
     try{
       if(adm && adm.handleBarcode){ adm.handleBarcode(code.replace(/\s/g,'')); return; }
@@ -248,7 +252,7 @@ function installUpdateNow(){
 }
 
 if(window.electronAPI){
-  window.electronAPI.onBarcode(code=>routeBarcode(code));
+  window.electronAPI.onBarcode((code,forceManager)=>routeBarcode(code,forceManager));
 
   const updateBar=document.getElementById('updateBar');
   const updateBarText=document.getElementById('updateBarText');
@@ -282,32 +286,12 @@ if(window.electronAPI){
     });
   }
 
-  window.electronAPI.onCaptureState(({paused})=>{
-    const pill=document.getElementById('shellScanPill');
-    const txt=document.getElementById('shellScanText');
-    pill.classList.toggle('paused',paused);
-    txt.textContent = paused ? 'Scanning PAUSED' : 'Scanning active';
-    // Also inform the manager frame so its own scan bar updates
-    try{
-      const mgr=document.getElementById('frame-manager').contentWindow;
-      if(mgr && mgr.onShellCaptureState) mgr.onShellCaptureState(paused);
-    }catch(e){}
-  });
-
-  window.electronAPI.getCaptureInfo().then(({paused})=>{
-    const pill=document.getElementById('shellScanPill');
-    const txt=document.getElementById('shellScanText');
-    pill.classList.toggle('paused',paused);
-    txt.textContent = paused ? 'Scanning PAUSED' : 'Scanning active';
-  });
 }
 
 // Let the manager frame request bringing the window to front (wrong-scan alert)
 window.addEventListener('message',ev=>{
   if(ev.data==='lottery:bringToFront' && window.electronAPI){
     window.electronAPI.bringToFront();
-  } else if(ev.data && ev.data.type==='lottery:setHotkey' && window.electronAPI){
-    window.electronAPI.setHotkey(ev.data.hotkey);
   } else if(ev.data && ev.data.type==='lottery:switchTab'){
     switchShellTab(ev.data.tab);
   }

@@ -425,7 +425,7 @@ td{padding:9px 12px;vertical-align:middle}
     <h2>📦 Add Inventory</h2>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Scan each pack's 14-digit unique barcode. Duplicates are ignored automatically.</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input type="text" id="bulkScanInput" placeholder="Scan or type 14-digit barcode..." maxlength="14"
+      <input type="text" id="bulkScanInput" placeholder="Scan or type 14-digit barcode..." maxlength="15"
         style="flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--text);outline:none"
         oninput="bulkScanValidate()"
         onkeydown="if(event.key==='Enter'){event.preventDefault();bulkScanAdd()}">
@@ -611,12 +611,21 @@ function updateStorage(){
 }
 
 // ── BARCODE SCANNER ───────────────────────────────────────
+// Only accepts tilde-prefixed input (Scanner 1 / lottery scanner), matching
+// the same policy enforced by the OS-level hook in main.js. This is a local
+// DOM-level fallback for when the window has plain focus without Electron's
+// global hook (e.g. running in a browser) — Scanner 2/manual input is
+// ignored here too.
 let buf='', lastKey=0, bufTimer=null;
 document.addEventListener('keydown', e=>{
   const tag=document.activeElement.tagName.toLowerCase();
   if(['input','textarea','select'].includes(tag)&&document.activeElement.id!=='__none__') return;
   if(e.key==='Enter'){
-    if(buf.length>=6) handleBarcode(buf.replace(/\s/g,''));
+    if(buf.length>=6){
+      const code=buf.replace(/\s/g,'');
+      if(code.startsWith('~')) handleBarcode(code.slice(1));
+      // else: unprefixed — ignore, matches Scanner 1-only policy
+    }
     buf=''; clearTimeout(bufTimer); return;
   }
   if(e.key.length===1){
@@ -1539,7 +1548,7 @@ function closeBulkScanModal(){
 }
 
 function bulkScanValidate(){
-  const val=document.getElementById('bulkScanInput').value.trim();
+  const val=document.getElementById('bulkScanInput').value.trim().replace(/^~/,'');
   const res=document.getElementById('bulkScanResult');
   if(!val){res.textContent='';return;}
   if(!/^\d{14}$/.test(val)){res.style.color='var(--muted)';res.textContent=`${val.length}/14 digits`;return;}
@@ -1555,7 +1564,7 @@ function bulkScanValidate(){
 
 async function bulkScanAdd(){
   const inp=document.getElementById('bulkScanInput');
-  const val=inp.value.trim();
+  const val=inp.value.trim().replace(/^~/,'');
   const res=document.getElementById('bulkScanResult');
   if(!/^\d{14}$/.test(val)){toast('Enter a valid 14-digit barcode','err');return;}
   // Block duplicate

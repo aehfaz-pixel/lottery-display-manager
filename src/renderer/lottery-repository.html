@@ -90,7 +90,9 @@ h1{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
         ⬆ Import Backup
         <input type="file" accept=".lotterybackup,.json" onchange="importFullBackup(this)" style="display:none">
       </label>
+      <button onclick="openAutoBackupFolder()" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-weight:700;padding:9px 20px;cursor:pointer;display:flex;align-items:center;gap:6px">📁 Open Backup Folder</button>
     </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted)">An automatic backup is also saved once per day on this computer (last 5 kept). Use the folder button to copy one to a USB drive.</div>
     <div id="backupStatus" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
   </div>
 </div>
@@ -464,28 +466,32 @@ function setBackupStatus(msg,color='var(--muted)'){
   if(el){el.textContent=msg;el.style.color=color;}
 }
 
+async function buildBackupObject(){
+  const ls={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);ls[k]=localStorage.getItem(k);
+  }
+  const idb={};
+  try{
+    const db=await new Promise((res,rej)=>{const r=indexedDB.open(IDB_NAME,2);r.onupgradeneeded=e=>IDB_STORES.forEach(s=>{if(!e.target.result.objectStoreNames.contains(s))e.target.result.createObjectStore(s);});r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
+    for(const store of IDB_STORES){
+      if(!db.objectStoreNames.contains(store)) continue;
+      idb[store]=await new Promise((res,rej)=>{
+        const tx=db.transaction(store,'readonly');
+        const items={};
+        const cur=tx.objectStore(store).openCursor();
+        cur.onsuccess=e=>{const c=e.target.result;if(c){items[c.key]=c.value;c.continue();}else res(items);};
+        cur.onerror=rej;
+      });
+    }
+  }catch(e){console.warn('IDB export partial:',e);}
+  return {version:1,exportedAt:new Date().toISOString(),localStorage:ls,indexedDB:{[IDB_NAME]:idb}};
+}
+
 async function exportFullBackup(){
   setBackupStatus('Preparing backup…');
   try{
-    const ls={};
-    for(let i=0;i<localStorage.length;i++){
-      const k=localStorage.key(i);ls[k]=localStorage.getItem(k);
-    }
-    const idb={};
-    try{
-      const db=await new Promise((res,rej)=>{const r=indexedDB.open(IDB_NAME,2);r.onupgradeneeded=e=>IDB_STORES.forEach(s=>{if(!e.target.result.objectStoreNames.contains(s))e.target.result.createObjectStore(s);});r.onsuccess=e=>res(e.target.result);r.onerror=rej;});
-      for(const store of IDB_STORES){
-        if(!db.objectStoreNames.contains(store)) continue;
-        idb[store]=await new Promise((res,rej)=>{
-          const tx=db.transaction(store,'readonly');
-          const items={};
-          const cur=tx.objectStore(store).openCursor();
-          cur.onsuccess=e=>{const c=e.target.result;if(c){items[c.key]=c.value;c.continue();}else res(items);};
-          cur.onerror=rej;
-        });
-      }
-    }catch(e){console.warn('IDB export partial:',e);}
-    const backup={version:1,exportedAt:new Date().toISOString(),localStorage:ls,indexedDB:{[IDB_NAME]:idb}};
+    const backup=await buildBackupObject();
     const json=JSON.stringify(backup);
     const blob=new Blob([json],{type:'application/json'});
     const a=document.createElement('a');
@@ -495,6 +501,39 @@ async function exportFullBackup(){
     setBackupStatus('✓ Backup exported ('+Math.round(json.length/1024)+' KB)','var(--success)');
   }catch(e){setBackupStatus('✗ Export failed: '+e.message,'var(--danger)');console.error(e);}
 }
+
+// ── AUTO BACKUP ────────────────────────────────────────────
+function getElectronAPI(){
+  if(window.top && window.top.electronAPI) return window.top.electronAPI;
+  if(window.electronAPI) return window.electronAPI;
+  return null;
+}
+
+function openAutoBackupFolder(){
+  const api=getElectronAPI();
+  if(api && api.openBackupFolder){
+    api.openBackupFolder();
+  }
+}
+
+async function runAutoBackupIfNeeded(){
+  const api=getElectronAPI();
+  if(api && api.debugLog) api.debugLog('runAutoBackupIfNeeded: checking (api available: '+!!api+')');
+  if(!api || !api.checkAutoBackupNeeded || !api.saveAutoBackup) return;
+  try{
+    const needed=await api.checkAutoBackupNeeded();
+    if(api.debugLog) api.debugLog('runAutoBackupIfNeeded: needed='+needed);
+    if(!needed) return;
+    const backup=await buildBackupObject();
+    const json=JSON.stringify(backup);
+    api.saveAutoBackup(json);
+  }catch(e){
+    console.warn('Auto backup failed:',e);
+    if(api && api.debugLog) api.debugLog('runAutoBackupIfNeeded FAILED: '+e.message);
+  }
+}
+// Run once, shortly after this tab loads — never blocks the UI
+setTimeout(runAutoBackupIfNeeded,3000);
 
 async function importFullBackup(input){
   const file=input.files[0];if(!file)return;

@@ -699,19 +699,6 @@ html[data-theme="light"] .slot-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.18)}
     <div class="dcfg-desc" style="margin-top:6px">Portrait rotates the display 90° — left edge becomes top. All features work the same.</div>
   </div>
 
-  <div class="dcfg-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:16px">
-    <div class="dcfg-info" style="margin-bottom:8px"><span class="dcfg-label">🔌 Scanner Pause Hotkey</span><span class="dcfg-val" id="scanHotkeyLabel" style="font-size:12px">Ctrl+Shift+P</span></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" id="hkCtrl" checked> Ctrl</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" id="hkShift" checked> Shift</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" id="hkAlt"> Alt</label>
-      <span style="color:var(--muted);font-size:12px">+</span>
-      <input type="text" id="hkKey" maxlength="1" value="P" style="width:44px;text-align:center;text-transform:uppercase;padding:6px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:6px;color:var(--accent);font-weight:800;font-family:monospace" oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()">
-      <button class="btn btn-primary btn-sm" onclick="saveHotkeyFromModal()">Save</button>
-    </div>
-    <div class="dcfg-desc" style="margin-top:8px">Press this combo to <b>pause</b> lottery scanning so a scan goes into another app's field (e.g. scanning a product into a website). Press again to resume. While paused, lottery packs won't be recorded.</div>
-  </div>
-
   <div class="btn-row" style="margin-top:22px">
     <div style="flex:1"></div>
     <button class="btn btn-sec" onclick="closeDisplayCfgModal()">Close</button>
@@ -778,13 +765,22 @@ let pendingPackOverride=null; // {code, slotNumber} — held when pack ID mismat
 let lastScanUndo=null; // {slotNumber, fromTicket, toTicket} — set after each scan-driven advance, cleared on next scan or manual change
 
 // ── GLOBAL SCANNER (fires when NO input is focused) ───────
+// Only accepts tilde-prefixed input (Scanner 1 / lottery scanner), matching
+// the same policy enforced by the OS-level hook in main.js. Unprefixed
+// input (Scanner 2, manual typing) is ignored here too — it's just a local
+// DOM-level fallback for when the window has plain focus without Electron's
+// global hook (e.g. running in a browser).
 let buf='', lastKey=0, bufTimer=null;
 document.addEventListener('keydown', e=>{
   const tag=document.activeElement.tagName.toLowerCase();
   // If user is typing in any input/textarea, let the field handle it
   if(['input','textarea','select'].includes(tag)) return;
   if(e.key==='Enter'){
-    if(buf.length>=6) globalBarcode(buf.replace(/\s/g,''));
+    if(buf.length>=6){
+      const code=buf.replace(/\s/g,'');
+      if(code.startsWith('~')) globalBarcode(code.slice(1));
+      // else: unprefixed — ignore, matches Scanner 1-only policy
+    }
     buf=''; clearTimeout(bufTimer); return;
   }
   if(e.key.length===1){
@@ -2043,27 +2039,7 @@ function openDisplayCfgModal(){
   if(borderEl) borderEl.checked=cfg.showBorder!==false;
   const bgColorEl=document.getElementById('dcfg-bgColor');
   if(bgColorEl){bgColorEl.value=cfg.bgColor||'#050008';const lbl=document.getElementById('dcfg-bgColor-val');if(lbl)lbl.textContent=cfg.bgColor||'#050008';}
-  // Populate scanner hotkey fields
-  const hk=loadScanHotkey()||{ctrl:true,shift:true,alt:false,key:'P'};
-  const cEl=document.getElementById('hkCtrl'),sEl=document.getElementById('hkShift'),aEl=document.getElementById('hkAlt'),kEl=document.getElementById('hkKey');
-  if(cEl)cEl.checked=!!hk.ctrl;
-  if(sEl)sEl.checked=!!hk.shift;
-  if(aEl)aEl.checked=!!hk.alt;
-  if(kEl)kEl.value=(hk.key||'P').toUpperCase();
-  applyHotkeyLabel(hk);
   document.getElementById('dispCfgModal').style.display='flex';
-}
-function saveHotkeyFromModal(){
-  const key=(document.getElementById('hkKey').value||'').toUpperCase();
-  if(!key){toast('Pick a letter key for the hotkey','err');return;}
-  const hk={
-    ctrl:document.getElementById('hkCtrl').checked,
-    shift:document.getElementById('hkShift').checked,
-    alt:document.getElementById('hkAlt').checked,
-    key
-  };
-  if(!hk.ctrl&&!hk.shift&&!hk.alt){toast('Use at least one modifier (Ctrl/Shift/Alt)','err');return;}
-  saveScanHotkey(hk);
 }
 function _updateOrientBtns(isPortrait){
   const lb=document.getElementById('dcfg-orient-landscape');
@@ -2114,16 +2090,6 @@ const FONT_ELEMENTS=[
 
 function openCustomizeModal(){
   const cfg=loadDisplayCfg();
-  // Slot Tabs
-  ['ticketLabel','slotLabel'].forEach(k=>{
-    const el=document.getElementById('cst-'+k);
-    if(el)el.value=cfg[k]||DCFG_DEFAULTS[k];
-  });
-  ['ticketBg','ticketText','slotBg','slotText'].forEach(k=>{
-    const el=document.getElementById('cst-'+k);
-    const lbl=document.getElementById('cst-'+k+'-val');
-    if(el){el.value=cfg[k]||DCFG_DEFAULTS[k];if(lbl)lbl.textContent=cfg[k]||DCFG_DEFAULTS[k];}
-  });
   // Borders
   ['bronzeMax','silverMax','goldMax'].forEach(k=>{
     const el=document.getElementById('cst-'+k);
@@ -2138,56 +2104,18 @@ function openCustomizeModal(){
   updateBorderPreviews(cfg);
   // Fonts — build rows dynamically
   buildFontRows(cfg);
-  // Spotlight
-  const spToggleEl=document.getElementById('cst-spotlightEnabled');
-  if(spToggleEl) spToggleEl.checked=!!cfg.spotlightEnabled;
-  const spDurEl=document.getElementById('cst-spotlightDuration');
-  if(spDurEl) spDurEl.value=cfg.spotlightDuration||5;
-  const spSim=document.getElementById('cst-spotlightSimultaneous');
-  if(spSim) spSim.checked=!!cfg.spotlightSimultaneous;
-  const spCornerEl=document.getElementById('cst-spotlightCorner');
-  if(spCornerEl) spCornerEl.value=cfg.spotlightCorner||'br';
-  spotlightSimultaneousChanged();
-  buildSpotlightChecklist(cfg);
-  updateSpotlightDisabled(!!cfg.spotlightEnabled);
-  // Featured
-  const featToggleEls=document.querySelectorAll('#cst-featuredEnabled');
-  const featToggleEl=featToggleEls[featToggleEls.length-1];
-  if(featToggleEl) featToggleEl.checked=!!cfg.featuredEnabled;
-  buildFeaturedChecklist(cfg);
-  toggleFeaturedSelect();
-  // Slot Layout sliders
-  const slMap={blockW:'banBlockW',blockH:'banBlockH',numScale:'banNumScale',tagScale:'banTagScale'};
-  Object.entries(slMap).forEach(([id,cfgKey])=>{
-    const el=document.getElementById('sl-'+id);
-    if(el){el.value=cfg[cfgKey]??DCFG_DEFAULTS[cfgKey];document.getElementById('sl-'+id+'-val').textContent=el.value+'%';}
-  });
-  const posMap={tx:'banTicketX',ty:'banTicketY',sx:'banSlotX',sy:'banSlotY'};
-  Object.entries(posMap).forEach(([id,cfgKey])=>{
-    const el=document.getElementById('sl-'+id);
-    if(el) el.value=Math.round(cfg[cfgKey]??DCFG_DEFAULTS[cfgKey]);
-  });
-  switchCtab2('tabs');
+  switchCtab('borders');
   document.getElementById('customizeModal').style.display='flex';
 }
 function closeCustomizeModal(){document.getElementById('customizeModal').style.display='none';}
 
 function switchCtab(tab){
-  ['tabs','borders','fonts','layout'].forEach(t=>{
+  ['borders','fonts'].forEach(t=>{
     const b=document.getElementById('ctab-'+t);
     const c=document.getElementById('ctab-'+t+'-content');
     if(b) b.classList.toggle('active',t===tab);
     if(c) c.style.display=t===tab?'block':'none';
   });
-}
-function switchCtab2(tab){
-  ['tabs','borders','fonts','layout','spotlight','featured'].forEach(t=>{
-    const b=document.getElementById('ctab2-'+t);
-    const c=document.getElementById('ctab2-'+t+'-content');
-    if(b) b.classList.toggle('active',t===tab);
-    if(c) c.style.display=t===tab?'block':'none';
-  });
-  if(tab==='layout') initSlotLayoutCanvas();
 }
 
 function buildFontRows(cfg){
@@ -2282,42 +2210,13 @@ function liveCustomize(){
       if(prev){prev.style.fontFamily=`'${el.value}',sans-serif`;}
     }
   });
-  // Spotlight
-  const spToggle=document.getElementById('cst-spotlightEnabled');
-  if(spToggle) cfg.spotlightEnabled=spToggle.checked;
-  cfg.spotlightSlots=[...document.querySelectorAll('.sp-slot-cb:checked')].map(cb=>parseInt(cb.value));
-  const spDur=document.getElementById('cst-spotlightDuration');
-  if(spDur) cfg.spotlightDuration=Math.max(1,parseInt(spDur.value)||5);
-  cfg.spotlightSimultaneous=document.getElementById('cst-spotlightSimultaneous')?.checked||false;
-  const spCorn=document.getElementById('cst-spotlightCorner');
-  if(spCorn) cfg.spotlightCorner=spCorn.value||'br';
-  // Slot Layout
-  const slMap={blockW:'banBlockW',blockH:'banBlockH',numScale:'banNumScale',tagScale:'banTagScale'};
-  Object.entries(slMap).forEach(([id,cfgKey])=>{
-    const el=document.getElementById('sl-'+id);
-    if(el){cfg[cfgKey]=parseInt(el.value);const lbl=document.getElementById('sl-'+id+'-val');if(lbl)lbl.textContent=el.value+'%';}
-  });
-  const posMap={tx:'banTicketX',ty:'banTicketY',sx:'banSlotX',sy:'banSlotY'};
-  Object.entries(posMap).forEach(([id,cfgKey])=>{
-    const el=document.getElementById('sl-'+id);
-    if(el) cfg[cfgKey]=parseFloat(el.value)||0;
-  });
-  // Featured
-  const featToggles=document.querySelectorAll('#cst-featuredEnabled');
-  const featToggle=featToggles[featToggles.length-1];
-  if(featToggle) cfg.featuredEnabled=featToggle.checked;
-  cfg.featuredSlots=[...document.querySelectorAll('.feat-slot-cb:checked')].map(cb=>parseInt(cb.value));
   saveDisplayCfg(cfg);
 }
 
 function resetCustomize(){
   const cfg=loadDisplayCfg();
-  const keys=['ticketLabel','slotLabel','ticketBg','ticketText','slotBg','slotText',
-    'bronzeMax','silverMax','goldMax','bronzeColor','silverColor','goldColor','platColor',
-    'fontBanNum','fontBanTag','fontLottoAmt','fontLottoName','fontLottoDraw',
-    'banTicketX','banTicketY','banSlotX','banSlotY','banPriceX','banPriceY','banBlockW','banBlockH','banNumScale','banTagScale',
-    'spotlightEnabled','spotlightSlots','spotlightDuration','spotlightSimultaneous',
-    'featuredEnabled','featuredSlots'];
+  const keys=['bronzeMax','silverMax','goldMax','bronzeColor','silverColor','goldColor','platColor',
+    'fontBanNum','fontBanTag','fontLottoAmt','fontLottoName','fontLottoDraw'];
   keys.forEach(k=>cfg[k]=DCFG_DEFAULTS[k]);
   saveDisplayCfg(cfg);
   openCustomizeModal();
@@ -3014,131 +2913,6 @@ function openPrintWindow(bodyContent,title='Report'){
       <button onclick="window.print()" style="padding:7px 18px;cursor:pointer;font-size:13px">🖨 Print / Save as PDF</button>
     </div>
     ${bodyContent}
-<!-- ── CUSTOMIZE MODAL ──────────────────────────────────── -->
-<div class="overlay" id="customizeModal" style="display:none" onclick="if(event.target===this)closeCustomizeModal()">
-<div class="modal" style="width:640px;max-height:88vh;overflow-y:auto">
-  <h2>🎨 Customize Display</h2>
-  <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Changes apply to the display within 2 seconds automatically.</p>
-
-  <div class="rpt-tabs" style="margin-bottom:20px">
-    <div class="rpt-tab active" id="ctab-tabs" onclick="switchCtab('tabs')">Slot Tabs</div>
-    <div class="rpt-tab" id="ctab-borders" onclick="switchCtab('borders')">Borders</div>
-    <div class="rpt-tab" id="ctab-fonts" onclick="switchCtab('fonts')">Fonts</div>
-  </div>
-
-  <!-- SLOT TABS -->
-  <div id="ctab-tabs-content">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Labels</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab label</span>
-        <input type="text" id="cst-ticketLabel" maxlength="12" oninput="liveCustomize()" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;font-weight:700;text-transform:uppercase;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px">
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab label</span>
-        <input type="text" id="cst-slotLabel" maxlength="12" oninput="liveCustomize()" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;font-weight:700;text-transform:uppercase;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px">
-      </div>
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-top:16px;border-top:1px solid var(--border)">Colors</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab background</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-ticketBg" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-ticketBg-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab text</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-ticketText" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-ticketText-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab background</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-slotBg" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-slotBg-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab text</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-slotText" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-slotText-val"></span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- BORDERS -->
-  <div id="ctab-borders-content" style="display:none">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Set the price range and color for each border tier. The color is used as the midpoint of the metallic gradient.</p>
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;margin-bottom:8px">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Tier</div>
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Max Price ($)</div>
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Color</div>
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Preview</div>
-    </div>
-    <!-- Bronze -->
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:700;color:#c06020">Bronze</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--muted)">$0 –</span>
-        <input type="number" id="cst-bronzeMax" min="1" max="999" oninput="liveCustomize()" style="width:60px;padding:4px 6px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="color" id="cst-bronzeColor" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-        <span style="font-size:11px;color:var(--muted)" id="cst-bronzeColor-val"></span>
-      </div>
-      <div id="cst-bronzePreview" style="height:16px;border-radius:4px"></div>
-    </div>
-    <!-- Silver -->
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:700;color:#a0a0a0">Silver</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--muted)" id="cst-silverMin-label">$11 –</span>
-        <input type="number" id="cst-silverMax" min="1" max="999" oninput="liveCustomize()" style="width:60px;padding:4px 6px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="color" id="cst-silverColor" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-        <span style="font-size:11px;color:var(--muted)" id="cst-silverColor-val"></span>
-      </div>
-      <div id="cst-silverPreview" style="height:16px;border-radius:4px"></div>
-    </div>
-    <!-- Gold -->
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:700;color:#ffd700">Gold</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--muted)" id="cst-goldMin-label">$51 –</span>
-        <input type="number" id="cst-goldMax" min="1" max="999" oninput="liveCustomize()" style="width:60px;padding:4px 6px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="color" id="cst-goldColor" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-        <span style="font-size:11px;color:var(--muted)" id="cst-goldColor-val"></span>
-      </div>
-      <div id="cst-goldPreview" style="height:16px;border-radius:4px"></div>
-    </div>
-    <!-- Platinum -->
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--border)">
-      <span style="font-size:12px;font-weight:700;color:#ffd700">Platinum</span>
-      <div style="font-size:11px;color:var(--muted)" id="cst-platMin-label">$101+</div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="color" id="cst-platColor" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-        <span style="font-size:11px;color:var(--muted)" id="cst-platColor-val"></span>
-      </div>
-      <div id="cst-platPreview" style="height:16px;border-radius:4px"></div>
-    </div>
-  </div>
-
-  <!-- FONTS -->
-  <div id="ctab-fonts-content" style="display:none">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose fonts for each text element on the display.</p>
-    <div id="font-rows"></div>
-  </div>
-
-  <div class="btn-row" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
-    <button class="btn btn-sec btn-sm" onclick="resetCustomize()">Reset to defaults</button>
-    <div style="flex:1"></div>
-    <button class="btn btn-sec" onclick="closeCustomizeModal()">Close</button>
-  </div>
-</div>
-</div>
 
 </body></html>`;
   const blob=new Blob([html],{type:'text/html'});
@@ -4095,7 +3869,6 @@ try{checkAndArchiveMonthlySales();}catch(e){console.warn('Monthly archive:',e);}
 // Barcodes arrive from a system-wide key hook in the main process.
 // The manager may run standalone (has window.electronAPI) OR inside the
 // shell iframe (no electronAPI here — the shell calls handleHookBarcode()).
-let capturePaused=false;
 const inShell = (window.parent && window.parent!==window);
 
 // Helper: bring window to front, whether standalone or in shell
@@ -4103,22 +3876,16 @@ function reqBringToFront(){
   if(window.electronAPI){ window.electronAPI.bringToFront(); }
   else if(inShell){ window.parent.postMessage('lottery:bringToFront','*'); }
 }
-// Helper: push hotkey to main process, whether standalone or in shell
-function reqSetHotkey(hk){
-  if(window.electronAPI){ window.electronAPI.setHotkey(hk); }
-  else if(inShell){ window.parent.postMessage({type:'lottery:setHotkey',hotkey:hk},'*'); }
-}
 
-// Core handler for a barcode arriving from the global hook
+// Core handler for a barcode arriving from the global hook.
+// Only the tilde-prefixed lottery scanner reaches this handler at all —
+// main.js no longer forwards unprefixed (Scanner 2 / keyboard) input.
 function handleHookBarcode(code){
   code=String(code||'').trim();
-  // If it's NOT a valid 14-digit lottery barcode, this is almost certainly
-  // a product/other scan made without pressing the pause hotkey.
   if(!isUniqueBC(code)){
     reqBringToFront();
-    const hkLabel=document.getElementById('scanHotkeyLabel')?.textContent||'the pause hotkey';
-    setScan('err','⚠ Non-lottery barcode scanned ('+code+') — nothing recorded. Press '+hkLabel+' first to scan products/other codes.');
-    toast('Non-lottery barcode — press the pause hotkey to scan other codes','err');
+    setScan('err','⚠ Unrecognised lottery scanner input ('+code+') — nothing recorded.');
+    toast('Unrecognised lottery scanner input','err');
     document.getElementById('scanLast').textContent=code;
     setTimeout(()=>setScan('ready'),7000);
     return;
@@ -4126,296 +3893,17 @@ function handleHookBarcode(code){
   globalBarcode(code);
 }
 
-// Called by the shell when the pause hotkey toggles
-function onShellCaptureState(paused){
-  capturePaused=paused;
-  if(paused){
-    setScan('warn','⏸ Scanner capture PAUSED — scans now go to other apps. Press hotkey again to resume.');
-  } else {
-    setScan('ok','▶ Scanner capture RESUMED — lottery scanning active');
-    setTimeout(()=>setScan('ready'),3000);
-  }
-}
-
 if(window.electronAPI){
   // Standalone mode — wire directly to the hook
   window.electronAPI.onBarcode(code=>handleHookBarcode(code));
-  window.electronAPI.onCaptureState(({paused})=>onShellCaptureState(paused));
-  window.electronAPI.getCaptureInfo().then(({paused,hotkey})=>{
-    capturePaused=paused;
-    applyHotkeyLabel(hotkey);
-    const saved=loadScanHotkey();
-    if(saved){ reqSetHotkey(saved); applyHotkeyLabel(saved); }
-    setScan('ok','🔌 Background scanning active — scan anytime, even from other apps');
-    setTimeout(()=>setScan('ready'),4000);
-  });
+  setScan('ok','🔌 Background scanning active — scan anytime, even from other apps');
+  setTimeout(()=>setScan('ready'),4000);
 } else if(inShell){
-  // Shell mode — the shell calls handleHookBarcode()/onShellCaptureState().
-  // Just restore + push the saved hotkey, and show status.
-  const saved=loadScanHotkey();
-  if(saved){ reqSetHotkey(saved); applyHotkeyLabel(saved); }
+  // Shell mode — the shell calls handleHookBarcode() directly.
   setScan('ok','🔌 Background scanning active — scan anytime, even from other apps');
   setTimeout(()=>setScan('ready'),4000);
 }
 
-// ── SCAN HOTKEY CONFIG ────────────────────────────────────
-const SCAN_HOTKEY_KEY='lotteryApp_scan_hotkey';
-function loadScanHotkey(){
-  try{const r=localStorage.getItem(SCAN_HOTKEY_KEY);return r?JSON.parse(r):null}catch{return null}
-}
-function saveScanHotkey(hk){
-  localStorage.setItem(SCAN_HOTKEY_KEY,JSON.stringify(hk));
-  reqSetHotkey(hk);
-  applyHotkeyLabel(hk);
-  toast('Scan pause hotkey saved','ok');
-}
-function applyHotkeyLabel(hk){
-  if(!hk) return;
-  const parts=[];
-  if(hk.ctrl)parts.push('Ctrl');
-  if(hk.shift)parts.push('Shift');
-  if(hk.alt)parts.push('Alt');
-  parts.push(hk.key.toUpperCase());
-  const label=parts.join('+');
-  const el=document.getElementById('scanHotkeyLabel');
-  if(el) el.textContent=label;
-}
-
-// ── SLOT LAYOUT CANVAS ───────────────────────────────────
-function initSlotLayoutCanvas(){
-  const canvas=document.getElementById('slotLayoutCanvas');
-  if(!canvas) return;
-  // Use fixed dimensions from inline style — don't rely on offsetWidth (hidden elements return 0)
-  const W=240, H=185;
-  const cfg=loadDisplayCfg();
-
-  const bw=(cfg.banBlockW??33)/100*W;
-  const bh=(cfg.banBlockH??13)/100*H;
-  const ns=(cfg.banNumScale??100)/100;
-  const ts=(cfg.banTagScale??100)/100;
-  const numSize=Math.max(7,Math.round(bh*0.45*ns));
-  const tagSize=Math.max(5,Math.round(bh*0.28*ts));
-
-  const tx=(cfg.banTicketX??0)/100*W;
-  const ty=(cfg.banTicketY??82)/100*H;
-  const sx=(cfg.banSlotX??67)/100*W;
-  const sy=(cfg.banSlotY??82)/100*H;
-
-  // Sync sliders + number inputs if not already set
-  const sliderMap={blockW:cfg.banBlockW??33,blockH:cfg.banBlockH??13,numScale:cfg.banNumScale??100,tagScale:cfg.banTagScale??100};
-  Object.entries(sliderMap).forEach(([id,val])=>{
-    const el=document.getElementById('sl-'+id);
-    const lbl=document.getElementById('sl-'+id+'-val');
-    if(el&&!el._slInit){el.value=val;el._slInit=true;}
-    if(lbl) lbl.textContent=(el?el.value:val)+'%';
-  });
-  const posMap={tx:cfg.banTicketX??0,ty:cfg.banTicketY??82,sx:cfg.banSlotX??67,sy:cfg.banSlotY??82};
-  Object.entries(posMap).forEach(([id,val])=>{
-    const el=document.getElementById('sl-'+id);
-    if(el&&!el._slInit){el.value=Math.round(val);el._slInit=true;}
-  });
-
-  const tEl=document.getElementById('slBanTicket');
-  const sEl=document.getElementById('slBanSlot');
-  const pEl=document.getElementById('slBanPrice');
-  if(!tEl||!sEl) return;
-
-  const px=(cfg.banPriceX??33)/100*W;
-  const py=(cfg.banPriceY??82)/100*H;
-
-  tEl.style.cssText+=`;width:${bw}px;height:${bh}px;left:${tx}px;top:${ty}px;background:${cfg.ticketBg||'#3a1500'}`;
-  sEl.style.cssText+=`;width:${bw}px;height:${bh}px;left:${sx}px;top:${sy}px;background:${cfg.slotBg||'#e8a040'}`;
-  if(pEl) pEl.style.cssText+=`;width:${bw}px;height:${bh}px;left:${px}px;top:${py}px`;
-
-  const tTag=document.getElementById('slBanTicketTag');
-  const tNum=document.getElementById('slBanTicketNum');
-  const sTag=document.getElementById('slBanSlotTag');
-  const sNum=document.getElementById('slBanSlotNum');
-
-  if(tTag){tTag.style.fontSize=tagSize+'px';tTag.style.color=cfg.ticketText||'#f5c500';tTag.textContent=(cfg.ticketLabel||'TKT').toUpperCase();}
-  if(tNum){tNum.style.fontSize=numSize+'px';tNum.style.color=cfg.ticketText||'#f5c500';tNum.textContent='42';}
-  if(sTag){sTag.style.fontSize=tagSize+'px';sTag.style.color=cfg.slotText||'#1a0800';sTag.textContent=(cfg.slotLabel||'SLOT').toUpperCase();}
-  if(sNum){sNum.style.fontSize=numSize+'px';sNum.style.color=cfg.slotText||'#1a0800';sNum.textContent='#7';}
-
-  makeDraggable(tEl,'tx','ty',W,H);
-  makeDraggable(sEl,'sx','sy',W,H);
-  if(pEl) makeDraggable(pEl,'px','py',W,H);
-}
-
-function makeDraggable(el,xId,yId,W,H){
-  if(!el||el._dragInit) return;
-  el._dragInit=true;
-  let startX,startY,startL,startT;
-
-  function onDown(e){
-    e.preventDefault();
-    const clientX=e.touches?e.touches[0].clientX:e.clientX;
-    const clientY=e.touches?e.touches[0].clientY:e.clientY;
-    startX=clientX; startY=clientY;
-    startL=parseFloat(el.style.left)||0;
-    startT=parseFloat(el.style.top)||0;
-    document.addEventListener('mousemove',onMove);
-    document.addEventListener('mouseup',onUp);
-    document.addEventListener('touchmove',onMove,{passive:false});
-    document.addEventListener('touchend',onUp);
-  }
-
-  function onMove(e){
-    e.preventDefault();
-    const clientX=e.touches?e.touches[0].clientX:e.clientX;
-    const clientY=e.touches?e.touches[0].clientY:e.clientY;
-    const bw=parseFloat(el.style.width)||60;
-    const bh=parseFloat(el.style.height)||28;
-    const newL=Math.max(0,Math.min(W-bw, startL+(clientX-startX)));
-    const newT=Math.max(0,Math.min(H-bh, startT+(clientY-startY)));
-    el.style.left=newL+'px';
-    el.style.top=newT+'px';
-    const xEl=document.getElementById('sl-'+xId);
-    const yEl=document.getElementById('sl-'+yId);
-    if(xEl) xEl.value=Math.round(newL/W*100);
-    if(yEl) yEl.value=Math.round(newT/H*100);
-  }
-
-  function onUp(){
-    document.removeEventListener('mousemove',onMove);
-    document.removeEventListener('mouseup',onUp);
-    document.removeEventListener('touchmove',onMove);
-    document.removeEventListener('touchend',onUp);
-    nudgeLayout();
-  }
-
-  el.addEventListener('mousedown',onDown);
-  el.addEventListener('touchstart',onDown,{passive:false});
-}
-
-function sliderLayout(){
-  // Update val labels
-  ['blockW','blockH','numScale','tagScale'].forEach(id=>{
-    const el=document.getElementById('sl-'+id);
-    const lbl=document.getElementById('sl-'+id+'-val');
-    if(el&&lbl) lbl.textContent=el.value+'%';
-  });
-  syncLayoutFromInputs();
-}
-
-function nudgeLayout(){
-  syncLayoutFromInputs();
-}
-
-function syncLayoutFromInputs(){
-  const cfg=loadDisplayCfg();
-  cfg.banBlockW=parseInt(document.getElementById('sl-blockW')?.value)??33;
-  cfg.banBlockH=parseInt(document.getElementById('sl-blockH')?.value)??13;
-  cfg.banNumScale=parseInt(document.getElementById('sl-numScale')?.value)??100;
-  cfg.banTagScale=parseInt(document.getElementById('sl-tagScale')?.value)??100;
-  cfg.banTicketX=parseFloat(document.getElementById('sl-tx')?.value)??0;
-  cfg.banTicketY=parseFloat(document.getElementById('sl-ty')?.value)??82;
-  cfg.banSlotX=parseFloat(document.getElementById('sl-sx')?.value)??67;
-  cfg.banSlotY=parseFloat(document.getElementById('sl-sy')?.value)??82;
-  // Price block position — read from dragged element position
-  const pElSync=document.getElementById('slBanPrice');
-  if(pElSync&&pElSync.style.left){
-    cfg.banPriceX=Math.round(parseFloat(pElSync.style.left)/240*100);
-    cfg.banPriceY=Math.round(parseFloat(pElSync.style.top)/185*100);
-  }
-  saveDisplayCfg(cfg);
-  // Reset _slInit flags so canvas re-reads fresh values
-  ['sl-blockW','sl-blockH','sl-numScale','sl-tagScale','sl-tx','sl-ty','sl-sx','sl-sy'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el._slInit=true;
-  });
-  // Re-render canvas blocks directly
-  const W=240,H=185;
-  const bw=cfg.banBlockW/100*W, bh=cfg.banBlockH/100*H;
-  const ns=cfg.banNumScale/100, ts=cfg.banTagScale/100;
-  const numSize=Math.max(7,Math.round(bh*0.45*ns));
-  const tagSize=Math.max(5,Math.round(bh*0.28*ts));
-  const tEl=document.getElementById('slBanTicket');
-  const sEl=document.getElementById('slBanSlot');
-  const pEl=document.getElementById('slBanPrice');
-  if(tEl){tEl.style.width=bw+'px';tEl.style.height=bh+'px';tEl.style.left=(cfg.banTicketX/100*W)+'px';tEl.style.top=(cfg.banTicketY/100*H)+'px';tEl.style.background=cfg.ticketBg||'#3a1500';}
-  if(sEl){sEl.style.width=bw+'px';sEl.style.height=bh+'px';sEl.style.left=(cfg.banSlotX/100*W)+'px';sEl.style.top=(cfg.banSlotY/100*H)+'px';sEl.style.background=cfg.slotBg||'#e8a040';}
-  if(pEl){pEl.style.width=bw+'px';pEl.style.height=bh+'px';pEl.style.left=((cfg.banPriceX??33)/100*W)+'px';pEl.style.top=((cfg.banPriceY??82)/100*H)+'px';}
-  const tTag=document.getElementById('slBanTicketTag');const tNum=document.getElementById('slBanTicketNum');
-  const sTag=document.getElementById('slBanSlotTag');const sNum=document.getElementById('slBanSlotNum');
-  const pTag=document.getElementById('slBanPriceTag');const pNum=document.getElementById('slBanPriceNum');
-  if(tTag){tTag.style.fontSize=tagSize+'px';tTag.textContent=(cfg.ticketLabel||'TKT').toUpperCase();}
-  if(tNum){tNum.style.fontSize=numSize+'px';}
-  if(sTag){sTag.style.fontSize=tagSize+'px';sTag.textContent=(cfg.slotLabel||'SLOT').toUpperCase();}
-  if(sNum){sNum.style.fontSize=numSize+'px';}
-  if(pTag){pTag.style.fontSize=tagSize+'px';}
-  if(pNum){pNum.style.fontSize=numSize+'px';}
-}
-
-// ── SPOTLIGHT ─────────────────────────────────────────────
-function toggleSpotlightSelect(){
-  const cb=document.getElementById('cst-spotlightEnabled');
-  const panel=document.getElementById('sp-settings');
-  if(panel){
-    panel.style.opacity=cb?.checked?'1':'0.4';
-    panel.style.pointerEvents=cb?.checked?'':'none';
-  }
-}
-function updateSpotlightDisabled(enabled){
-  const panel=document.getElementById('sp-settings');
-  if(panel){panel.style.opacity=enabled?'1':'0.4';panel.style.pointerEvents=enabled?'':'none';}
-}
-function spotlightSimultaneousChanged(){
-  const sim=document.getElementById('cst-spotlightSimultaneous')?.checked;
-  const dur=document.getElementById('sp-duration-row');
-  if(dur) dur.style.opacity=sim?'0.4':'1';
-  if(dur) dur.style.pointerEvents=sim?'none':'auto';
-}
-function buildSpotlightChecklist(cfg){
-  const container=document.getElementById('sp-slot-checklist');
-  if(!container) return;
-  const selected=cfg.spotlightSlots||[];
-  const activeSlots=slotsData.slots.filter(s=>s.lotteryId&&!s.isFinished).sort((a,b)=>a.slotNumber-b.slotNumber);
-  container.innerHTML=activeSlots.map(s=>`
-    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 6px;border-radius:5px;background:var(--surface3);font-size:12px;color:var(--text)">
-      <input type="checkbox" class="sp-slot-cb" value="${s.slotNumber}" onchange="liveCustomize()"
-        ${selected.includes(s.slotNumber)?'checked':''} style="accent-color:var(--accent);cursor:pointer">
-      <span>#${s.slotNumber}${s._name?' <span style="color:var(--muted)">'+escH(s._name)+'</span>':''}</span>
-    </label>`).join('');
-}
-function buildFeaturedChecklist(cfg){
-  const container=document.getElementById('feat-slot-checklist');
-  if(!container) return;
-  const selected=cfg.featuredSlots||[];
-  const activeSlots=slotsData.slots.filter(s=>s.lotteryId&&!s.isFinished).sort((a,b)=>a.slotNumber-b.slotNumber);
-  container.innerHTML=activeSlots.map(s=>`
-    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 6px;border-radius:5px;background:var(--surface3);font-size:12px;color:var(--text)">
-      <input type="checkbox" class="feat-slot-cb" value="${s.slotNumber}" onchange="featuredChecklistChanged()"
-        ${selected.includes(s.slotNumber)?'checked':''} style="accent-color:var(--accent);cursor:pointer">
-      <span>#${s.slotNumber}${s._name?' <span style="color:var(--muted)">'+escH(s._name)+'</span>':''}</span>
-    </label>`).join('');
-  updateFeaturedCountMsg();
-}
-function featuredChecklistChanged(){
-  const cbs=[...document.querySelectorAll('.feat-slot-cb:checked')];
-  if(cbs.length>3){
-    // Uncheck the last one checked (this one)
-    event.target.checked=false;
-  }
-  updateFeaturedCountMsg();
-  liveCustomize();
-}
-function updateFeaturedCountMsg(){
-  const n=document.querySelectorAll('.feat-slot-cb:checked').length;
-  const msg=document.getElementById('feat-count-msg');
-  if(msg){
-    msg.textContent=n+' of 3 selected';
-    msg.style.color=n===3?'var(--green)':'var(--dim)';
-  }
-}
-function toggleFeaturedSelect(){
-  const cbs=document.querySelectorAll('#cst-featuredEnabled');
-  const cb=cbs[cbs.length-1];
-  const panel=document.getElementById('feat-settings');
-  if(panel){
-    panel.style.opacity=cb?.checked?'1':'0.4';
-    panel.style.pointerEvents=cb?.checked?'':'none';
-  }
-}
 </script>
 
 <!-- ── CUSTOMIZE MODAL ──────────────────────────────────── -->
@@ -4425,57 +3913,11 @@ function toggleFeaturedSelect(){
   <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Changes apply to the display within 2 seconds automatically.</p>
 
   <div class="rpt-tabs" style="margin-bottom:20px">
-    <div class="rpt-tab active" id="ctab2-tabs" onclick="switchCtab2('tabs')">Slot Tabs</div>
-    <div class="rpt-tab" id="ctab2-borders" onclick="switchCtab2('borders')">Borders</div>
-    <div class="rpt-tab" id="ctab2-fonts" onclick="switchCtab2('fonts')">Fonts</div>
-    <div class="rpt-tab" id="ctab2-layout" onclick="switchCtab2('layout')">Slot Layout</div>
-    <div class="rpt-tab" id="ctab2-spotlight" onclick="switchCtab2('spotlight')">Spotlight</div>
-    <div class="rpt-tab" id="ctab2-featured" onclick="switchCtab2('featured')">Featured</div>
+    <div class="rpt-tab active" id="ctab-borders" onclick="switchCtab('borders')">Borders</div>
+    <div class="rpt-tab" id="ctab-fonts" onclick="switchCtab('fonts')">Fonts</div>
   </div>
 
-  <!-- SLOT TABS -->
-  <div id="ctab2-tabs-content">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Labels</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab label</span>
-        <input type="text" id="cst-ticketLabel" maxlength="12" oninput="liveCustomize()" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;font-weight:700;text-transform:uppercase;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px">
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab label</span>
-        <input type="text" id="cst-slotLabel" maxlength="12" oninput="liveCustomize()" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;font-weight:700;text-transform:uppercase;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px">
-      </div>
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-top:16px;border-top:1px solid var(--border)">Colors</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab background</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-ticketBg" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-ticketBg-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Ticket tab text</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-ticketText" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-ticketText-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab background</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-slotBg" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-slotBg-val"></span>
-        </div>
-      </div>
-      <div><span style="font-size:11px;color:var(--muted)">Slot tab text</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="color" id="cst-slotText" oninput="liveCustomize()" style="width:36px;height:28px;border:none;padding:0;background:none;cursor:pointer">
-          <span style="font-size:11px;color:var(--muted)" id="cst-slotText-val"></span>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- BORDERS -->
-  <div id="ctab2-borders-content" style="display:none">
+  <div id="ctab-borders-content">
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Set the price range and color for each border tier. The color is used as the midpoint of the metallic gradient.</p>
     <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 14px;align-items:center;margin-bottom:8px">
       <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Tier</div>
@@ -4535,167 +3977,20 @@ function toggleFeaturedSelect(){
   </div>
 
   <!-- FONTS -->
-  <div id="ctab2-fonts-content" style="display:none">
+  <div id="ctab-fonts-content" style="display:none">
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose fonts for each text element on the display.</p>
     <div id="font-rows"></div>
   </div>
 
-  <!-- SLOT LAYOUT -->
-  <div id="ctab2-layout-content" style="display:none">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Drag the ticket and slot blocks to reposition them. Resize using the controls below.</p>
-    <div style="display:flex;gap:20px;align-items:flex-start">
-      <div style="flex-shrink:0">
-        <div id="slotLayoutCanvas" style="position:relative;width:240px;height:185px;background:#111;border:2px solid var(--border);border-radius:8px;overflow:hidden;cursor:default">
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.15;font-size:32px;pointer-events:none">🎫</div>
-          <div id="slBanTicket" style="position:absolute;cursor:move;user-select:none;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.5)">
-            <span id="slBanTicketTag" style="font-weight:800;letter-spacing:1.5px;text-transform:uppercase;line-height:1;margin-bottom:2px"></span>
-            <span id="slBanTicketNum" style="font-weight:700;line-height:1"></span>
-          </div>
-          <div id="slBanSlot" style="position:absolute;cursor:move;user-select:none;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.5)">
-            <span id="slBanSlotTag" style="font-weight:800;letter-spacing:1.5px;text-transform:uppercase;line-height:1;margin-bottom:2px"></span>
-            <span id="slBanSlotNum" style="font-weight:700;line-height:1"></span>
-          </div>
-          <div id="slBanPrice" style="position:absolute;cursor:move;user-select:none;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.5);background:#1a1a1a">
-            <span id="slBanPriceTag" style="font-weight:800;letter-spacing:1.5px;text-transform:uppercase;line-height:1;margin-bottom:2px;color:#888;font-size:7px">PRICE</span>
-            <span id="slBanPriceNum" style="font-weight:700;line-height:1;color:#f5c500">$5</span>
-          </div>
-          <div style="position:absolute;inset:2px;border:1px dashed rgba(245,197,0,.3);border-radius:6px;pointer-events:none"></div>
-        </div>
-        <div style="font-size:10px;color:var(--dim);text-align:center;margin-top:5px">Drag blocks to reposition</div>
-      </div>
-      <div style="flex:1;display:flex;flex-direction:column;gap:12px">
-        <div>
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Block Size</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Width <span style="color:var(--dim)">(% of card)</span></div>
-              <input type="range" id="sl-blockW" min="15" max="50" step="1" oninput="sliderLayout()" style="width:100%">
-              <div style="font-size:11px;color:var(--accent);text-align:center" id="sl-blockW-val"></div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Height <span style="color:var(--dim)">(% of card)</span></div>
-              <input type="range" id="sl-blockH" min="8" max="40" step="1" oninput="sliderLayout()" style="width:100%">
-              <div style="font-size:11px;color:var(--accent);text-align:center" id="sl-blockH-val"></div>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Font Scale</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Number size</div>
-              <input type="range" id="sl-numScale" min="50" max="200" step="5" oninput="sliderLayout()" style="width:100%">
-              <div style="font-size:11px;color:var(--accent);text-align:center" id="sl-numScale-val"></div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Label size</div>
-              <input type="range" id="sl-tagScale" min="50" max="200" step="5" oninput="sliderLayout()" style="width:100%">
-              <div style="font-size:11px;color:var(--accent);text-align:center" id="sl-tagScale-val"></div>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Position (fine tune)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div style="border:1px solid var(--border);border-radius:6px;padding:8px">
-              <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">Ticket Block</div>
-              <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-                <span style="font-size:10px;color:var(--muted);width:10px">X</span>
-                <input type="number" id="sl-tx" min="0" max="100" step="1" oninput="nudgeLayout()" style="width:55px;padding:3px 5px;font-size:11px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                <span style="font-size:10px;color:var(--dim)">%</span>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                <span style="font-size:10px;color:var(--muted);width:10px">Y</span>
-                <input type="number" id="sl-ty" min="0" max="100" step="1" oninput="nudgeLayout()" style="width:55px;padding:3px 5px;font-size:11px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                <span style="font-size:10px;color:var(--dim)">%</span>
-              </div>
-            </div>
-            <div style="border:1px solid var(--border);border-radius:6px;padding:8px">
-              <div style="font-size:11px;font-weight:700;color:#1a0800;background:#e8a040;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:6px">Slot Block</div>
-              <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-                <span style="font-size:10px;color:var(--muted);width:10px">X</span>
-                <input type="number" id="sl-sx" min="0" max="100" step="1" oninput="nudgeLayout()" style="width:55px;padding:3px 5px;font-size:11px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                <span style="font-size:10px;color:var(--dim)">%</span>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                <span style="font-size:10px;color:var(--muted);width:10px">Y</span>
-                <input type="number" id="sl-sy" min="0" max="100" step="1" oninput="nudgeLayout()" style="width:55px;padding:3px 5px;font-size:11px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                <span style="font-size:10px;color:var(--dim)">%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SPOTLIGHT -->
-  <div id="ctab2-spotlight-content" style="display:none">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Highlight featured slots with an animated border on the display.</p>
-    <div style="display:flex;flex-direction:column;gap:14px">
-
-      <!-- Enable toggle -->
-      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-        <input type="checkbox" id="cst-spotlightEnabled" onchange="toggleSpotlightSelect();liveCustomize()" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text)">Enable Spotlight</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">Highlighted slots glow on the display</div>
-        </div>
-      </label>
-
-      <div id="sp-settings" style="display:flex;flex-direction:column;gap:12px;opacity:.4;pointer-events:none">
-
-        <!-- Simultaneous toggle -->
-        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-          <input type="checkbox" id="cst-spotlightSimultaneous" onchange="spotlightSimultaneousChanged();liveCustomize()" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-          <div>
-            <div style="font-size:12px;font-weight:700;color:var(--text)">Highlight all at once</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:1px">All selected slots glow simultaneously. Disables the timer.</div>
-          </div>
-        </label>
-
-        <!-- Duration (hidden when simultaneous) -->
-        <div id="sp-duration-row" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Duration per slot</div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <input type="number" id="cst-spotlightDuration" min="1" max="60" value="5" oninput="liveCustomize()" style="width:70px;padding:6px 8px;font-size:13px;font-weight:700;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;text-align:center">
-            <span style="font-size:12px;color:var(--muted)">seconds per slot</span>
-          </div>
-        </div>
-
-        <!-- Slot checklist -->
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Slots to highlight</div>
-          <div id="sp-slot-checklist" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:200px;overflow-y:auto"></div>
-          <div style="font-size:11px;color:var(--dim);margin-top:8px">Select one or more slots.</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- FEATURED -->
-  <div id="ctab2-featured-content" style="display:none">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Pin 3 slots to a featured column on the right side of the display. They appear larger with a glow border.</p>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-        <input type="checkbox" id="cst-featuredEnabled" onchange="toggleFeaturedSelect();liveCustomize()" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text)">Enable Featured Panel</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">Shows 3 selected slots in a large column on the right</div>
-        </div>
-      </label>
-      <div id="feat-settings" style="display:flex;flex-direction:column;gap:12px;opacity:.4;pointer-events:none">
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Select exactly 3 slots</div>
-          <div id="feat-slot-checklist" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:220px;overflow-y:auto"></div>
-          <div id="feat-count-msg" style="font-size:11px;color:var(--dim);margin-top:8px">0 of 3 selected</div>
-        </div>
-      </div>
-    </div>
+  <div class="btn-row" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+    <button class="btn btn-sec btn-sm" onclick="resetCustomize()">Reset to defaults</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-sec" onclick="closeCustomizeModal()">Close</button>
   </div>
 </div>
 </div>
+
+
 
 <!-- PRIZES MODAL -->
 <div class="overlay" id="prizesModal" style="display:none" onclick="if(event.target===this)closePrizesModal()">

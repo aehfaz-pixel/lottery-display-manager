@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 
 // Disable HTTP cache so updated HTML files always load fresh
 app.commandLine.appendSwitch('disable-http-cache');
@@ -58,8 +58,6 @@ const SERVER_PORT = 3000;
 let scanBuf = '';
 let lastKeyTime = 0;
 let scanResetTimer = null;
-let capturePaused = false;          // toggled by hotkey
-let hotkey = { ctrl: true, shift: true, key: 'P' }; // default, customizable
 const BURST_MS = 50;                // max gap between scanner keystrokes
 const MIN_LEN = 6;                  // min chars to treat as a barcode
 
@@ -86,15 +84,6 @@ function startKeyHook() {
   }
 
   uIOhook.on('keydown', (e) => {
-    // Check for hotkey combo first (pause/resume)
-    if (matchesHotkey(e)) {
-      capturePaused = !capturePaused;
-      notifyRenderer('capture-state', { paused: capturePaused });
-      return;
-    }
-
-    if (capturePaused) return; // let keys flow to other apps
-
     const now = Date.now();
     const char = uiohookKeyToChar(e);
 
@@ -126,15 +115,6 @@ function startKeyHook() {
   console.log('[hook] Global key hook started.');
 }
 
-function matchesHotkey(e) {
-  // uiohook keycodes: we match by the rawcode/keycode for the letter + modifiers
-  const wantCtrl = hotkey.ctrl, wantShift = hotkey.shift, wantAlt = hotkey.alt || false;
-  const hasCtrl = e.ctrlKey, hasShift = e.shiftKey, hasAlt = e.altKey;
-  if (hasCtrl !== wantCtrl || hasShift !== wantShift || hasAlt !== wantAlt) return false;
-  const char = uiohookKeyToChar(e);
-  return char && char.toUpperCase() === hotkey.key.toUpperCase();
-}
-
 // uiohook-napi keycode → char (digits, letters, enter)
 function uiohookKeyToChar(e) {
   const kc = e.keycode;
@@ -150,6 +130,7 @@ function uiohookKeyToChar(e) {
     31:'S',20:'T',22:'U',47:'V',17:'W',45:'X',21:'Y',44:'Z',
   };
   if (kc === 28 || kc === 96) return 'ENTER'; // Enter / numpad Enter
+  if (kc === 41) return '~'; // backquote/tilde — Netum scanner prefix key
   if (digitMap[kc]) return digitMap[kc];
   if (letterMap[kc]) return letterMap[kc];
   return null;
@@ -165,18 +146,19 @@ function dispatchScan(code) {
     const cleanCode = code.slice(LOTTERY_PREFIX.length);
     console.log('[hook] Lottery scanner:', cleanCode);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('barcode', cleanCode);
+      // If our window doesn't have real OS focus (some other app does),
+      // force this scan to the Manager regardless of which shell tab is
+      // selected — a scan made while looking at another app should never
+      // land in whatever tab happens to be showing.
+      const appFocused = mainWindow.isFocused();
+      mainWindow.webContents.send('barcode', cleanCode, !appFocused);
     }
     return;
   }
 
-  // No prefix — Scanner 2 or keyboard. Route to manager only if not paused.
-  // Keystrokes already flowed to Windows naturally (uiohook doesn't suppress).
-  if (!capturePaused) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('barcode', code);
-    }
-  }
+  // No prefix — Scanner 2 or manual keyboard input. Never routed to the
+  // Lottery Manager. Keystrokes already flowed to Windows naturally
+  // (uiohook doesn't suppress), so Scanner 2 reaches whatever app has focus.
 }
 
 function notifyRenderer(channel, payload) {
@@ -321,6 +303,73 @@ ipcMain.on('confirm-import-applied', () => {
 
 ipcMain.on('debug-log', (_e, msg) => debugLog(`[renderer] ${msg}`));
 
+// ── AUTO BACKUP ───────────────────────────────────────────
+const AUTO_BACKUP_DIR = path.join(app.getPath('userData'), 'auto-backups');
+const AUTO_BACKUP_RETENTION = 5; // keep the 5 most recent daily backups
+
+function ensureAutoBackupDir() {
+  try {
+    if (!fs.existsSync(AUTO_BACKUP_DIR)) fs.mkdirSync(AUTO_BACKUP_DIR, { recursive: true });
+  } catch (e) {
+    debugLog(`AUTO BACKUP: could not create dir: ${e.message}`);
+  }
+}
+
+function todayStamp() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+// Renderer asks: has today's auto backup already been taken?
+ipcMain.handle('check-auto-backup-needed', () => {
+  try {
+    ensureAutoBackupDir();
+    const todayFile = path.join(AUTO_BACKUP_DIR, `auto-backup-${todayStamp()}.lotterybackup`);
+    return !fs.existsSync(todayFile);
+  } catch (e) {
+    debugLog(`AUTO BACKUP: check failed: ${e.message}`);
+    return false; // fail safe — don't force a backup if we can't even check
+  }
+});
+
+// Renderer sends the built backup JSON to write to disk
+ipcMain.on('save-auto-backup', (_e, backupJson) => {
+  try {
+    ensureAutoBackupDir();
+    const fileName = `auto-backup-${todayStamp()}.lotterybackup`;
+    const filePath = path.join(AUTO_BACKUP_DIR, fileName);
+    fs.writeFileSync(filePath, backupJson);
+    debugLog(`AUTO BACKUP: saved ${fileName}, size ${backupJson.length}`);
+
+    // Prune anything beyond the retention window
+    const files = fs.readdirSync(AUTO_BACKUP_DIR)
+      .filter(f => f.startsWith('auto-backup-') && f.endsWith('.lotterybackup'))
+      .sort(); // filenames are date-stamped, so lexical sort = chronological
+    if (files.length > AUTO_BACKUP_RETENTION) {
+      const toRemove = files.slice(0, files.length - AUTO_BACKUP_RETENTION);
+      toRemove.forEach(f => {
+        try {
+          fs.unlinkSync(path.join(AUTO_BACKUP_DIR, f));
+          debugLog(`AUTO BACKUP: pruned old backup ${f}`);
+        } catch (e) {
+          debugLog(`AUTO BACKUP: prune failed for ${f}: ${e.message}`);
+        }
+      });
+    }
+  } catch (e) {
+    debugLog(`AUTO BACKUP: save failed: ${e.message}`);
+  }
+});
+
+// Manual "Open backup folder" button in Repository tab
+ipcMain.on('open-backup-folder', () => {
+  try {
+    ensureAutoBackupDir();
+    shell.openPath(AUTO_BACKUP_DIR);
+  } catch (e) {
+    debugLog(`AUTO BACKUP: open folder failed: ${e.message}`);
+  }
+});
+
 ipcMain.on('app-restart-for-import', () => {
   const doRestart = () => {
     app.relaunch();
@@ -342,17 +391,6 @@ ipcMain.on('bring-to-front', () => {
     mainWindow.flashFrame(true);
   }
 });
-
-// Manager sets the hotkey
-ipcMain.on('set-hotkey', (_e, hk) => {
-  if (hk && hk.key) {
-    hotkey = { ctrl: !!hk.ctrl, shift: !!hk.shift, alt: !!hk.alt, key: hk.key };
-    console.log('[hook] Hotkey updated:', hotkey);
-  }
-});
-
-// Manager queries current capture state / hotkey
-ipcMain.handle('get-capture-info', () => ({ paused: capturePaused, hotkey }));
 
 // ── LIFECYCLE ─────────────────────────────────────────────
 app.whenReady().then(() => {
