@@ -23,7 +23,7 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 | Installed app (this dev machine) | `C:\Users\aehfa\AppData\Local\Programs\Lottery Manager\Lottery-Manager\Lottery-Manager.exe` |
 | Updater cache/logs (this dev machine) | `%LOCALAPPDATA%\lottery-electron-updater\` (has a `pending\` subfolder for in-progress downloads) |
 | Auto-backup folder (this dev machine) | `%APPDATA%\lottery-electron\auto-backups\` (5 most recent daily backups kept) |
-| Project knowledge (Claude project) | Should contain current copies of: `main.js`, `preload.js`, `server.js`, `package.json`, `fix-release.js`, `sync-version.js`, `pre-release-check.js`, all `src/renderer/*.html`, this file |
+| Project knowledge (Claude project) | Should contain current copies of: `main.js`, `preload.js`, `server.js`, `package.json`, `fix-release.js`, `sync-version.js`, `pre-release-check.js`, `README.md`, `CHANGELOG.md`, all `src/renderer/*.html`, `src/renderer/diagnostics.js`, this file |
 
 **If project knowledge files look outdated or contradict this file, trust GitHub `main` branch over project knowledge.** Project knowledge can go stale between uploads; GitHub is always current post-push.
 
@@ -31,9 +31,9 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.33
-- **Status:** ✅ Fully working — build, publish, auto-update, full-backup-import, promo image storage, daily auto-backup, and scanner routing (Scanner 1/Scanner 2 separation + window-focus-aware Manager routing) all confirmed functional end-to-end, tested on real packaged builds.
-- **Git:** Repo tracked, pushed to `origin/main`, currently at commit `b1b0e2a`.
+- **Version:** v1.0.34
+- **Status:** ✅ Fully working — everything from v1.0.33 (build, publish, auto-update, full-backup-import, promo image storage, daily auto-backup, scanner routing) still confirmed functional, PLUS a new Diagnostics system (see §11) — all verified end-to-end on both dev environment and the real packaged v1.0.34 build.
+- **Git:** Repo tracked, pushed to `origin/main`. Run `git log -1` to confirm the current commit hash — this file isn't auto-updated with it.
 - **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version.
 - **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data — verified with 86 real slots on 2 separate fresh devices, and again during the v1.0.29→v1.0.30 device migration.
 - **Promo/header image upload confirmed:** fixed a separate IndexedDB versioning bug (see §6.6).
@@ -42,6 +42,7 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
   - Only the `~`-prefixed lottery scanner (Scanner 1) can trigger app actions, from any source (OS-level global hook, and each tab's local browser-level fallback listener).
   - Scanner 2 / manual keyboard input is fully ignored everywhere except when a specific input field is deliberately focused (e.g. typing into Add Inventory).
   - When the app window itself lacks OS focus, a `~` scan always routes to Manager regardless of which shell tab happens to be selected — verified across 8 focus/tab/prefix scenarios on the real packaged v1.0.33 build.
+- **Diagnostics system confirmed (new in v1.0.34, see §11 for full architecture):** correlated event timeline, global error capture, state diffing, and a cross-window layout inspector — all verified working identically in dev AND on the real packaged v1.0.34 build, via two full end-to-end smoke test passes.
 
 ---
 
@@ -57,14 +58,17 @@ D:\Store\Lottery\lottery-electron\
 ├── sync-version.js         — Post-version-bump: copies package.json version into lottery-app.html's versionTag span
 ├── pre-release-check.js    — Pre-release safety net: grep-checks critical code is present before allowing a release
 ├── CHANGELOG.md            — Human-readable one-line-per-release log
+├── README.md               — User/operator-facing setup, scanner config, Diagnostics usage, troubleshooting
 ├── .gitignore              — excludes node_modules/, dist/
 ├── src/renderer/
-│   ├── lottery-app.html         — Shell: 5 iframe tabs, update bar UI, theme toggle, scan routing (incl. window-focus check)
+│   ├── lottery-app.html         — Shell: 6 iframe tabs, update bar UI, theme toggle, scan routing (incl. window-focus check), top-bar Inspect toggle
 │   ├── lottery-home.html        — Dashboard (stats, slot breakdown)
 │   ├── lottery-manager.html     — Main scanning/slot management, Customize modal (Borders/Fonts only)
 │   ├── lottery-admin.html       — Lottery types DB + Inventory (incl. Add Inventory tilde-aware scan field)
 │   ├── lottery-display.html     — TV display (fullscreen slot grid + banner/slideshow)
-│   └── lottery-repository.html  — Reports + full backup + daily auto-backup trigger
+│   ├── lottery-repository.html  — Reports + full backup + daily auto-backup trigger
+│   ├── lottery-diagnostics.html — Diagnostics tab UI: live timeline viewer, filters, Copy JSON, Clear, Inspect toggle
+│   └── diagnostics.js           — Shared library loaded by ALL 7 files above — see §11
 └── dist/ (gitignored, regenerated per build) — installers, blockmaps, latest.yml
 ```
 
@@ -80,6 +84,7 @@ D:\Store\Lottery\lottery-electron\
 - localStorage stores all app data (slots, inventory, sales log, settings) — see key list below.
 - **Dual scanner support (as of v1.0.31–33):** Scanner 1 (lottery) is programmed with a `~` prefix and is the *only* input source that can trigger app actions, from any focus state. Scanner 2 (or manual keyboard) is never routed to any app logic — it flows through to whatever else has focus, exactly like a normal keyboard, *except* when a specific input field inside the app (e.g. Add Inventory) is deliberately focused, in which case it types normally like any text field. See §6.7–6.9 for the three bugs found while building this out.
 - **Window-focus-aware routing (v1.0.33):** if the app window itself lacks OS focus when a `~` scan arrives, it always routes to Manager regardless of which shell tab was last selected — so a scan made while looking at another app never lands in a leftover Inventory/Admin tab.
+- **Diagnostics system (v1.0.34):** a shared `diagnostics.js` library loaded by all 7 renderer files provides a correlated event timeline, global error capture, state diffing, and a cross-window layout inspector — see §11 for full architecture. Built specifically to replace most manual DevTools digging for routing bugs, silent errors, and layout/sizing issues.
 
 ### Key localStorage keys
 ```
@@ -216,10 +221,45 @@ Must be set in Windows User Variables for GitHub publish to work from this build
 ---
 
 ## 9. Known non-issues (don't waste time on these)
+- **Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed** — real bug, deliberately deferred, not a non-issue to silently ignore forever. Full write-up in §6.10. Only affects scanning on Admin/Inventory outside the Bulk Scan modal (does nothing, no crash) — not needed for current workflows, so left as-is for now.
 - CRLF/LF warnings from git on Windows — harmless, cosmetic.
 - `node_modules already used by electron-builder` warning about `electron-rebuild` — harmless, cosmetic, ignore.
 - Old GitHub releases (e.g. v1.0.9) left published without the update bar UI — harmless historical artifacts, just don't mark them "Latest."
 - **QR-code/phone-relay scanner testing showing occasional intermittent drops** — not an app bug. The global hook's burst-detection window (`BURST_MS = 50`) requires every keystroke in a scan to land within 50ms of the previous one. A real USB scanner hits this easily; a phone app relaying over Bluetooth after optical decode sometimes doesn't, causing an occasional silently-dropped scan during testing. Re-scanning normally succeeds. This is a testing-method artifact, not something to "fix" unless the *real* Netum scanner also shows drops.
+- **Periodic brief overflow/recover flicker on `.slot-name-label` for very long lottery names (found + root-caused v1.0.34, deliberately left alone)** — `lottery-manager.html`'s existing "auto-push every 10 seconds" interval (§5, silent background sync) rebuilds the whole slot grid, and for names long enough to need CSS ellipsis-truncation, the label very briefly renders at full (untruncated) width before the truncation CSS applies, then snaps back. Confirmed via the Diagnostics layout watcher — happens every ~10s for any slot with an unusually long name, self-corrects in well under a second, and is not visible to the human eye during normal use. Root cause is fully understood (see `renderGrid()`'s trace logging, added specifically to nail this down); not fixed because it's cosmetic-only and invisible in practice. If it's ever worth fixing: ensure the label is truncated correctly on its very first paint rather than rendering wide-then-shrinking.
+
+## 6.10. KNOWN OPEN BUG — Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed (found 2026-08-06, deferred)
+
+**Status: confirmed, not yet fixed — deliberately deferred, revisit later.**
+
+### The bug
+`lottery-admin.html` declares `function handleBarcode(code){...}` twice:
+- Line ~652: the real implementation (pack barcode → TLC lookup / found-in-db highlight / unrecognised-barcode toast).
+- Line ~1673–1682: a wrapper added later to route scans into the Bulk Scan modal's input when that modal is open, added via:
+  ```js
+  const _origHandleBarcode = handleBarcode;
+  function handleBarcode(code){
+    if (bulkScanModal is open) { feed code into bulk scan input; return; }
+    _origHandleBarcode(code);
+  }
+  ```
+Because JS hoists **function declarations** before any code runs, and both declarations share the name `handleBarcode` in the same scope, the *second* declaration wins the hoisting and is what `handleBarcode` already refers to by the time `const _origHandleBarcode = handleBarcode` executes. So `_origHandleBarcode` actually captures the wrapper itself, not the original line-652 implementation.
+
+### The effect
+- When the Bulk Scan / "+ Add Inventory" modal **is open**: works correctly (scan feeds the bulk queue as intended).
+- When that modal **is closed** and a `~`-prefixed scan reaches Admin's `handleBarcode` (either via its own local keydown listener or via `lottery-app.html`'s tab-routing when Admin/Inventory is the active tab and the app has focus): the wrapper calls `_origHandleBarcode(code)`, which is itself, which calls itself again, forever — until the JS engine throws `RangeError: Maximum call stack size exceeded`. Confirmed via a standalone Node.js reproduction of the exact hoisting behavior.
+
+### Actual impact (verified low, hence deferred)
+- Fails silently: no crash of the app, no effect on other tabs/windows. The exception is contained to that single call stack (a keydown handler), console-logs an error, and execution otherwise continues normally.
+- Does **not** affect Manager tab scanning, the OS-level `~`-prefix hook in `main.js`, or the window-focus-aware `forceManager` redirect (all separate code paths, untouched by this).
+- Net user-visible effect: scanning a lottery on the Admin/Inventory tab while the Bulk Scan/Add Inventory modal is **closed** does nothing — no lookup, no toast, no feedback. Scanning while that modal is **open** (the actual intended workflow for adding inventory) works fine.
+- Brief CPU burn from the recursive loop before hitting the stack limit; not noticeable in practice.
+
+### Decision (2026-08-06)
+Deferred — the non-modal scan path isn't needed for current workflows (Add Inventory is always open when scanning lotteries into Admin/Inventory). Revisit and fix when convenient; two candidate fixes discussed:
+1. Rename the line-652 function (e.g. `handleBarcodeCore`) and have the wrapper call it directly by name — removes the shadowing bug entirely, restores the original lookup behavior for the non-modal case.
+2. Leave the lookup behavior gone and just make the non-modal branch a no-op (matches "don't need it to work" stance) — simpler, but permanently drops the standalone lottery-lookup-by-scan feature outside the modal.
+**Files affected if fixed:** `lottery-admin.html` only.
 
 ## 6.5. Full backup import — CRITICAL, READ CAREFULLY
 
@@ -337,6 +377,8 @@ This bug was completely invisible before the Scanner 1/Scanner 2 separation ship
 
 ---
 
+---
+
 ## 10. Release Log (running — update every release)
 
 Format for each entry:
@@ -444,7 +486,76 @@ Format for each entry:
 **Result:** ✅ Success — verified across 8 explicit focus/tab/prefix scenarios on the real packaged build, including confirming Admin/Inventory's own scan handling and the Add Inventory field are both unaffected.
 **Files touched:** main.js, preload.js, src/renderer/lottery-app.html
 
+### v1.0.34 — 2026-08-06
+**Change:** Added a full Diagnostics system (see §11 for full architecture): a shared `diagnostics.js` library loaded by all 7 renderer files providing a correlated real-time event timeline, global error capture, state diffing (with clean array-change summaries), and a cross-window click-to-inspect layout tool with a passive overflow watcher. New "🩺 Diagnostics" tab + always-visible "🔍 Inspect" button in the shell's top bar. Built specifically to replace manual DevTools digging for routing bugs, silent errors, and layout/sizing issues going forward.
+
+Also fixed 9 real issues found while building and testing this system (none were pre-existing regressions — all found live during this session's own testing):
+1. `ticketHistory` (and similar capped/shifting arrays) showed noisy per-index diffs instead of a clean "N dropped, N added" summary.
+2. The layout inspector's only trigger (Ctrl+Shift+L) could collide with third-party software at the OS level and never reach the browser — replaced with a global top-bar button as the primary, reliable trigger.
+3. The passive overflow watcher only checked the outer `.slot-card` box, missing overflow at inner elements like `.slot-name-label` that get masked by CSS ellipsis truncation at the card level.
+4. A single repeated/runaway log event (e.g. a recursive error firing thousands of times) could flush the entire capped ring buffer, losing all older history — now collapses into one entry with a count.
+5. Copy JSON silently failed inside the Diagnostics iframe due to an Electron/iframe Clipboard API focus quirk — added a working `execCommand` fallback plus real error logging instead of a generic failure message.
+6. Admin's lottery search box rebuilt the entire table on every keystroke with no debounce, destroying any in-progress name/price cell edit mid-type — now debounced and skips/defers the rebuild while a cell is actively focused.
+7. Inventory's search box used a trailing-only debounce, making typing feel unresponsive/laggy — changed to leading+trailing so the first keystroke updates instantly.
+8. Scans blocked for exceeding a pack's configured ticket count failed completely silently — now logged clearly in Diagnostics.
+9. Turning on the layout inspector trapped ALL clicks including its own toggle button and the tab bar, locking the user out of turning it off or navigating away — fixed via a `data-diag-ui` exclusion attribute plus Escape as a guaranteed independent panic-off.
+
+A 10th issue (a harmless, invisible-to-the-eye periodic layout flicker on very long lottery names, caused by an existing 10-second background auto-push interval rebuilding the grid) was investigated, fully root-caused via new `renderGrid()` trace logging, and deliberately left unfixed — see §9.
+
+**Result:** ✅ Success — every feature and fix individually verified live during testing (including a real 7,850-iteration recursion burst to stress-test the ring buffer collapse), then a full combined smoke test run twice: once in dev, once on the actual packaged, installed v1.0.34 build. No regressions found in either pass. Change 1 (Admin `handleBarcode` recursion, §6.10) remains deliberately deferred and unfixed — this release does not touch it.
+**Files touched:** src/renderer/diagnostics.js (new), src/renderer/lottery-diagnostics.html (new), src/renderer/lottery-app.html, src/renderer/lottery-manager.html, src/renderer/lottery-admin.html, README.md, CHANGELOG.md, PROJECT_STATUS.md
+
 <!--
 ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
 Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
 -->
+
+---
+
+## 11. Diagnostics System — added v1.0.34
+
+A shared, same-origin library (`src/renderer/diagnostics.js`) loaded first-thing in `<head>` by all 7 renderer files, providing a correlated real-time event timeline, global error capture, state diffing, and a cross-window click-to-inspect layout tool. Built to replace most manual DevTools digging for routing bugs, silent errors, and layout/sizing issues (the original motivating pain point: slot cards overflowing/being too big, which used to require extensive manual DevTools inspection to diagnose).
+
+### Core API (`window.Diag`)
+```js
+Diag.log(correlationId, category, message, data?)   // basic timeline entry
+Diag.newAction(label, category?)                     // generates a correlation ID + logs it
+Diag.logDiff(id, category, label, beforeVal, afterVal) // structured before/after diff (see below)
+Diag.snapshotKey(localStorageKey)                     // parsed snapshot helper for diffing
+Diag.deepDiff(before, after)                          // the underlying diff algorithm, exposed directly
+Diag.toggleInspect() / Diag.setInspectMode(bool)      // layout inspector on/off (global, cross-window)
+Diag.watchOverflow(cssSelector)                       // passive overflow watcher for given selector(s)
+Diag.readLog() / Diag.clear()                         // read or wipe the ring buffer
+```
+Categories in use: `scan`, `route`, `state`, `ipc`, `error`, `info`, `layout`, `action`.
+
+### Storage
+- Events live in a `localStorage` ring buffer, key `__diagLog`, capped at 150 entries (message length also capped) — small enough to be a non-issue even though it does get swept into full Repository backups along with everything else.
+- **Consecutive identical entries collapse into one, with a growing `count` field**, instead of pushing duplicates — critical for surviving a runaway error burst (e.g. a recursive bug logging itself thousands of times per second) without flushing all older history out of the capped buffer. Verified with a real 7,850-iteration burst collapsing to a single entry.
+- Inspect mode's on/off state is a separate flag, key `__diagInspectMode` — also `localStorage`, which is how a single toggle reaches every window/iframe at once: writing the flag fires a native `storage` event in every OTHER same-origin window/iframe (Display included — it's a separate `BrowserWindow`, not an iframe, but shares the same origin/partition, so this works across it too), and each one's own copy of `diagnostics.js` reacts and applies the state locally.
+
+### Diagnostics tab (`lottery-diagnostics.html`)
+Filterable live viewer (polls + listens for `storage` events), shows diffs as readable field-by-field rows (not raw JSON), has Copy JSON (with an `execCommand` fallback — the async Clipboard API routinely fails inside this iframe with "Document is not focused," which is an Electron/iframe quirk, not a bug to chase further) and Clear.
+
+### Layout Inspector (2c)
+- **Primary trigger: "🔍 Inspect" button in the shell's top tab bar** (`lottery-app.html`) — always visible, works from any tab, and is the global on/off switch (via the `__diagInspectMode` flag above).
+- Secondary/optional: Ctrl+Shift+L also toggles it locally — kept only as a bonus, NOT relied upon, because it can collide with third-party software at the OS level (found colliding with an AMD utility during testing) and never reach the browser at all on some machines.
+- **Click-trap safety:** turning inspect mode on intercepts clicks to show the inspector panel — which, if unguarded, also traps clicks on the toggle button and tab bar itself, locking you out. Fixed via a `data-diag-ui` attribute on the shell's `#tabbar` and the Diagnostics toolbar `#bar` — `onInspectClick` checks `el.closest('[data-diag-ui]')` and lets those clicks through untouched. **Escape always force-turns-off inspect mode**, independent of click routing at all, as a guaranteed panic switch — if any future UI is added that isn't marked `data-diag-ui` and gets trapped, Escape is the fallback.
+- **Passive overflow watcher:** `Diag.watchOverflow(selector)` is called on Manager (`.slot-card, .slot-name-label, .flip-game-name`) and Display (`.lotto-card`) after their initial render. Uses `ResizeObserver` to detect `scrollWidth > clientWidth` (or height), logging once on the transition INTO overflow and once on the transition back OUT (both edges, not just detection) — and a `MutationObserver` re-scans for newly-rendered elements so it keeps working after slots re-render, not just on page load.
+
+### State Diffing (2b)
+`Diag.deepDiff(before, after)` walks two values and returns a list of `{path, before, after}` changes. Arrays of objects are matched by an identifying field (`slotNumber`/`id`/`gameNumber`) rather than raw index, to avoid noise when items shift position. **Arrays of primitives get special handling** (e.g. `ticketHistory`, a capped FIFO array of numbers): before falling back to index-based comparison, it checks whether `after` is `before` with some items dropped from the front and/or added to the back (the common push+shift pattern), and if so collapses the whole thing into one line like `(len 14) → (len 15) — 1 added: [46]` instead of showing every shifted index as a separate "change."
+
+### What's instrumented right now
+- `lottery-app.html`: `routeBarcode()` (routing decisions + errors), update/IPC events.
+- `lottery-manager.html`: `handleHookBarcode()`, the ticket-update path in `globalBarcode()` (including the blocked/exceeds-pack-size branch), `renderGrid()` (logs its caller — added specifically to trace the periodic flicker, see §9).
+- `lottery-admin.html`: both `handleBarcode()` definitions (including the known Change 1 recursion — logging it doesn't fix it, but makes it visible instead of silent).
+- All 7 files: global `window.onerror` / `unhandledrejection` capture, automatically, with no per-file setup needed beyond loading the script.
+
+### Not yet built (future phases, no code exists for these)
+- **2d — Diagnostic Export + "Flag This":** bundling recent timeline + state + layout snapshot into one exportable file, plus a one-click capture button. Not started.
+- **2e — Performance Timing + Feature Watch Mode:** scan-to-render latency marks, and a filtered view scoped to one feature under test. Not started.
+- **"Major Change 1" (design only, not started):** a "Report Problem" button that auto-generates a diagnostic report and sends it directly via the Telegram Bot API (no email/WhatsApp app-switching required) to the developer's phone, with a local-file fallback if offline at the moment of sending. Requires creating a free Telegram bot via @BotFather (one-time setup, not yet done) before any code can be written. Only relevant for a single-store deployment as currently scoped — would need rework (per-store bot/token handling) if this project ever goes multi-store.
+
+### A structural lesson learned while BUILDING this system (worth remembering for future edits to `diagnostics.js`)
+`diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to). **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**

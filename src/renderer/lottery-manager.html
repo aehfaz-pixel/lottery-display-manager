@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lottery Manager</title>
+<script src="diagnostics.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -814,6 +815,7 @@ function globalBarcode(code){
     if(existing){
       const total=getSlotTotal(existing);
       if(total&&ticketNum>total){
+        if(window.Diag) Diag.log('none','state',`⛔ blocked: slot #${existing.slotNumber} ticket #${ticketNum} exceeds pack size ${total} — SOLD OUT`);
         window.focus();
         setScan('err','⛔ Ticket #'+ticketNum+' blocked — Slot #'+existing.slotNumber+' pack only has '+total+' tickets. Scan a new pack.');
         toast('Ticket #'+ticketNum+' exceeds pack size of '+total+' — SOLD OUT','err');
@@ -821,9 +823,11 @@ function globalBarcode(code){
         return;
       }
       const prevCount=existing.currentTicket;
+      const _diagBefore = window.Diag ? JSON.parse(JSON.stringify(existing)) : null;
       pushHistory(existing,prevCount);
       existing.currentTicket=ticketNum+1;
       existing.lastUpdated=Date.now();
+      if(window.Diag) Diag.logDiff('none','state',`slot #${existing.slotNumber} updated`,_diagBefore,existing);
       logSale(existing,prevCount,existing.currentTicket);
       checkPackFinished(existing);
       saveSlots();
@@ -1093,6 +1097,16 @@ function reorderSlots(fromNum,toNum){
 
 // ── GRID ──────────────────────────────────────────────────
 function renderGrid(){
+  // Fix 10 (queued investigation): renderGrid rebuilds every slot card,
+  // which is what makes .slot-name-label briefly overflow/recover — this
+  // traces WHO called it and how often, so a future repeat of the periodic
+  // overflow/recover cycle can be matched against an actual caller instead
+  // of guessed at from static code.
+  if(window.Diag){
+    const stack=(new Error()).stack||'';
+    const caller=stack.split('\n')[2]?.trim().slice(0,80)||'unknown caller';
+    Diag.log('none','info','renderGrid() called ← '+caller);
+  }
   const grid=document.getElementById('slotGrid');
   const max=slotsData.slots.length>0?Math.max(...slotsData.slots.map(s=>s.slotNumber)):0;
   document.getElementById('slotPill').textContent=`${max} slot${max!==1?'s':''}`;
@@ -3756,6 +3770,7 @@ slotsData.slots.forEach(s=>{
 });
 saveSlots();
 renderGrid(); renderSidebar(); updateAdPill();
+if(window.Diag) Diag.watchOverflow('.slot-card, .slot-name-label, .flip-game-name');
 function applyExternalTheme(theme){
   document.documentElement.setAttribute('data-theme',theme);
 }
@@ -3882,7 +3897,9 @@ function reqBringToFront(){
 // main.js no longer forwards unprefixed (Scanner 2 / keyboard) input.
 function handleHookBarcode(code){
   code=String(code||'').trim();
+  if(window.Diag) Diag.log('none','scan','manager.handleHookBarcode received: '+code);
   if(!isUniqueBC(code)){
+    if(window.Diag) Diag.log('none','error','manager: unrecognised lottery scanner input: '+code);
     reqBringToFront();
     setScan('err','⚠ Unrecognised lottery scanner input ('+code+') — nothing recorded.');
     toast('Unrecognised lottery scanner input','err');

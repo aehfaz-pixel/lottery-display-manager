@@ -19,15 +19,17 @@ lottery-electron/
 ├── start.bat            ← Double-click to run
 └── src/
     └── renderer/
-        ├── lottery-app.html        ← Shell — 5 tabs as iframes, update bar, theme toggle, scan routing
+        ├── lottery-app.html        ← Shell — 6 tabs as iframes, update bar, theme toggle, scan routing, Inspect toggle
         ├── lottery-home.html       ← Dashboard (stats, slot breakdown)
         ├── lottery-manager.html    ← Main scanning/slot management, Customize display settings
         ├── lottery-admin.html      ← Lottery types DB + Inventory (separate from Manager, not standalone/legacy)
         ├── lottery-display.html    ← TV display (fullscreen slot grid, jackpot banner, promo/ad slideshow)
-        └── lottery-repository.html ← Reports, full backup export/import, daily auto-backup
+        ├── lottery-repository.html ← Reports, full backup export/import, daily auto-backup
+        ├── lottery-diagnostics.html← Diagnostics tab — live event timeline, error log, layout inspector viewer
+        └── diagnostics.js          ← Shared library loaded by every page above — see "Diagnostics" section below
 ```
 
-The shell (`lottery-app.html`) loads all five tabs as same-origin iframes served from `http://localhost:3000` by the Express server in `server.js`, so they all share one `localStorage`/IndexedDB.
+The shell (`lottery-app.html`) loads all six tabs as same-origin iframes served from `http://localhost:3000` by the Express server in `server.js`, so they all share one `localStorage`/IndexedDB.
 
 ## How it works
 
@@ -47,6 +49,19 @@ This app is designed around **two physical scanners with different jobs**:
 
 **Setting the `~` prefix:** most USB barcode scanners (including the Netum NT-1228BC used here) support programming a prefix character by scanning special configuration barcodes printed in the scanner's manual — not through this app's settings. Look for "Enable Prefix Output" → "Add Prefix" → the hex code for `~` (`7E`) in your scanner's documentation.
 
+**Bluetooth scanners (e.g. a phone acting as a scanner):** occasional dropped/missed scans are a known symptom of Bluetooth latency, not a bug — the app requires keystrokes to arrive in a tight burst (under 50ms apart) to be recognized as a scan at all, and a Bluetooth hiccup mid-scan will make it get silently ignored. If this happens often, check the connection or consider a wired scanner.
+
+## Diagnostics (added v1.0.34)
+
+A built-in troubleshooting toolkit, meant to replace most manual DevTools digging for common problems (routing issues, silent errors, layout/sizing bugs).
+
+- **🩺 Diagnostics tab** — a live, filterable timeline of everything the app does: scans, routing decisions, state changes (with before/after diffs), errors (including ones that would otherwise fail silently), and layout events. Filter by category, Copy JSON to share a report, Clear to reset.
+- **🔍 Inspect (top bar, works from any tab)** — click-to-inspect layout tool. Turn it on, click any element anywhere in the app, and see its real box size, content size, overflow amount, and key CSS — without opening DevTools. Turning it on/off affects every window at once. **Escape always turns it off**, no matter what.
+- Layout problems (a slot too big/small, text overflowing its box) are also caught **automatically** in the background on Manager and Display — no need to go looking for them, they'll show up in the Diagnostics tab's "Layout" filter as soon as they happen.
+- All of this runs fully local — no data leaves the machine, no network dependency, no account needed.
+
+See `PROJECT_STATUS.md` §11 for the full technical architecture if you're extending this system.
+
 ## Display Window
 
 - In the Manager tab, click "Open Display" to launch it (or it auto-opens on a second monitor)
@@ -65,7 +80,7 @@ This app is designed around **two physical scanners with different jobs**:
 **Scanner not being picked up:**
 - Confirm Scanner 1 is actually sending the `~` prefix — test by typing into Notepad; you should see `~` followed by the barcode digits
 - Unprefixed scans are *never* picked up outside a focused input field — this is intentional, not a bug
-- If nothing at all is happening even with the `~` prefix, check the app's console (`npm run dev` opens DevTools automatically) for `[hook] Scan:` log lines to confirm the scan is being detected
+- If nothing at all is happening even with the `~` prefix, check the app's console (`npm run dev` opens DevTools automatically) for `[hook] Scan:` log lines to confirm the scan is being detected, or check the Diagnostics tab (no DevTools needed) — if a scan doesn't show up there at all, it never reached the app
 
 **Port 3000 in use:**
 - Close any other instance of the app or the old server

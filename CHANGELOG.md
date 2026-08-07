@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.34 — 2026-08-06
+- Added a Diagnostics system: correlated real-time event timeline, global error capture, state diffing, and a cross-window layout inspector (see `PROJECT_STATUS.md` §11 for full architecture)
+- New "🩺 Diagnostics" tab in the shell + always-visible "🔍 Inspect" button in the top bar
+- Fixed: Admin search (`#srch`) destroying in-progress name/price edits on every keystroke — now debounced and edit-aware
+- Fixed: Inventory search felt laggy while typing — now updates instantly on the first keystroke
+- Fixed: Copy JSON silently failing in the Diagnostics iframe — added a working fallback
+- Fixed: a single repeated/runaway log event (e.g. an error loop) could flush all older diagnostic history — now collapses into one counted entry
+- Fixed: array-based diffs (e.g. ticket history) showed noisy per-index changes instead of a clean summary
+- Fixed: turning on the layout inspector could trap clicks and block navigation — added safe-zones and an Escape-key panic-off
+- Blocked/rejected scans (ticket exceeds pack size) now show up in Diagnostics instead of failing silently
+- Known, deliberately deferred: Admin's `handleBarcode` has a pre-existing recursion bug when the Bulk Scan modal is closed (see `PROJECT_STATUS.md` §6.10) — not fixed in this release, tracked for later
+
 ## v1.0.33 — 2026-08-06
 - Added window-focus-aware scan routing: if the app window lacks OS focus when a `~` scan arrives, it always routes to Manager regardless of which shell tab was last selected
 

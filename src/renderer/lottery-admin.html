@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lottery Admin Database</title>
+<script src="diagnostics.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -243,7 +244,7 @@ td{padding:9px 12px;vertical-align:middle}
   <button class="btn btn-sec" onclick="syncAllTlc()" title="Sync all lotteries with TLC data">🔄 Sync All TLC</button>
   <button class="btn btn-sec" onclick="compressAllImages()" title="Re-compress all stored images to save storage space">🗜 Compress Images</button>
   <div class="spacer"></div>
-  <input type="text" class="search-box" id="srch" placeholder="🔍 Search name, barcode, ID..." oninput="renderTable()">
+  <input type="text" class="search-box" id="srch" placeholder="🔍 Search name, barcode, ID..." oninput="scheduleRenderTable()">
 </div>
 
 <div class="tbl-wrap">
@@ -650,6 +651,7 @@ function hideFetchError(){
 function openAddFromError(){hideFetchError();openAdd(_lastFailedCode||undefined);}
 
 function handleBarcode(code){
+  if(window.Diag) Diag.log('none','scan','admin.handleBarcode (core) received: '+code);
   document.getElementById('scanLast').textContent=code;
   hideFetchError();
   if(isPackBC(code)){
@@ -708,6 +710,23 @@ function setScan(state,msg){
 }
 
 // ── TABLE ─────────────────────────────────────────────────
+// Debounced, edit-aware search: rebuilding the whole table on every
+// keystroke used to destroy an in-progress name/price edit (the
+// contenteditable cell gets torn down and recreated mid-typing). This
+// coalesces rapid typing AND skips the rebuild entirely while a cell is
+// actively focused, deferring it until that edit's onblur (see updField).
+let _tblDebounceTimer=null, _tblPendingRender=false;
+function scheduleRenderTable(){
+  clearTimeout(_tblDebounceTimer);
+  _tblDebounceTimer=setTimeout(()=>{
+    const active=document.activeElement;
+    if(active && active.classList && active.classList.contains('editable')){
+      _tblPendingRender=true;
+      return;
+    }
+    renderTable();
+  },150);
+}
 function renderTable(){
   const q=document.getElementById('srch').value.toLowerCase();
   const head=document.getElementById('tHead'),body=document.getElementById('tBody');
@@ -772,6 +791,9 @@ function renderTable(){
 function updField(el){
   const lot=db.lotteries.find(l=>l.id===el.dataset.id);
   if(lot){lot[el.dataset.k]=el.textContent.trim();saveDB();}
+  // If a search re-render was deferred while this cell was being edited,
+  // apply it now that the edit is done (see scheduleRenderTable).
+  if(_tblPendingRender){ _tblPendingRender=false; renderTable(); }
 }
 function updCustom(el){
   const lot=db.lotteries.find(l=>l.id===el.dataset.id);
@@ -1406,12 +1428,20 @@ let _invDebounceTimer = null;
 let _invLastTab = null;
 
 function renderInventory(){
-  // Lazy: only render active sub-tab
+  // Leading-edge + trailing-edge debounce: the very first keystroke of a
+  // burst renders immediately (so typing never looks like it's doing
+  // nothing), while rapid subsequent keystrokes still coalesce into one
+  // final render 80ms after the last one, instead of rebuilding on every
+  // single character.
+  const doRender=()=>{
+    const dateActive = document.getElementById('invSubContent-date')?.classList.contains('active');
+    if(dateActive) renderInvByDate(); else renderInvAll();
+  };
+  if(!_invDebounceTimer) doRender();
   clearTimeout(_invDebounceTimer);
   _invDebounceTimer = setTimeout(()=>{
-    const dateActive = document.getElementById('invSubContent-date')?.classList.contains('active');
-    if(dateActive) renderInvByDate();
-    else renderInvAll();
+    _invDebounceTimer = null;
+    doRender();
   }, 80);
 }
 
@@ -1674,10 +1704,17 @@ function bulkScanLoad(){
 const _origHandleBarcode=handleBarcode;
 function handleBarcode(code){
   if(document.getElementById('bulkScanModal').style.display!=='none'){
+    if(window.Diag) Diag.log('none','scan','admin.handleBarcode (modal wrapper): modal open, routed to Bulk Scan input');
     const inp=document.getElementById('bulkScanInput');
     if(inp){inp.value=code;bulkScanValidate();bulkScanAdd();}
     return;
   }
+  // KNOWN ISSUE (see Change 1 / PROJECT_STATUS.md §6.10): _origHandleBarcode
+  // does not actually reference the line-652 implementation due to function
+  // hoisting — this call recurses into itself when the modal is closed.
+  // Logged here (once, cheaply) so the recursion is visible in Diagnostics
+  // instead of failing completely silently.
+  if(window.Diag) Diag.log('none','error','admin.handleBarcode: modal closed, falling back to _origHandleBarcode — KNOWN BUG, see Change 1 (recurses)');
   _origHandleBarcode(code);
 }
 
