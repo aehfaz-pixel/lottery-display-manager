@@ -220,6 +220,32 @@ Must be set in Windows User Variables for GitHub publish to work from this build
 
 ---
 
+## 8b. Note on tab/iframe count
+"6 tabs" ≠ "6 iframes." Inventory and Admin are two *separate* iframe instances both pointing at `lottery-admin.html`, loaded with different `#tab=inv` / `#tab=db` hashes to control which sub-view shows. Anything that loads/logs per-window (e.g. the Diagnostics timeline) will show `admin` twice for a single global event — observed directly during testing (`"inspect mode ON (admin) ×2"` in a real capture). This is expected, not a bug.
+
+## 8c. Historical bugs — already fixed, kept for context
+Don't re-derive these from scratch, and don't "clean up" the code patterns they left behind without understanding why.
+
+- **IndexedDB image store versioning (v1.0.29).** All lottery/promo images share one IndexedDB database (`lotteryImages`, store `images`), opened independently from 10 call sites across 7 files. Most correctly created the `images` object store via `onupgradeneeded` — but `lottery-display.html`'s 3 open calls didn't have one. If Display happened to be the *first* thing to ever open the database on a fresh profile, it silently created the DB with no store, permanently breaking image storage everywhere (IndexedDB only fires `onupgradeneeded` for the first-ever connection at a given version). **Fix:** bumped all 10 call sites to version 2 with a defensive `objectStoreNames.contains()` guard, plus an automatic repair routine for already-broken profiles. **Don't remove this guard from any `indexedDB.open('lotteryImages', 2)` call site.**
+
+- **Customize modal silently failed to open (v1.0.31, same day).** Two elements shared `id="customizeModal"` — the real one, and a dead copy sitting inside a `<script>` block's template literal (a JS string, not real DOM). A cleanup pass deleted the wrong one. **Lesson:** when two elements share an ID, check whether either copy is inside a `<script>` block/JS string before deciding which is "real" — `getElementById` never sees a duplicate ID sitting inside a JS string.
+
+- **Tilde character never reached the scan buffer (v1.0.31, same day).** `uiohookKeyToChar()` in `main.js` had no mapping for backquote/tilde at all, so every `~` keystroke returned `null` and was silently discarded — meaning prefix-based scan routing never actually worked, from any source, even though the rest of the system looked correct. **Fix:** `if (kc === 41) return '~';` (keycode 41 = `KEY_GRAVE` in the Linux evdev scheme this file already uses). Verify any future special key added to this map against the same evdev scheme.
+
+- **Scanner routing had two more gaps beyond the OS hook (v1.0.31→33, same/next day).** After the tilde fix: (1) `lottery-manager.html` and `lottery-admin.html` each have their own separate, local, browser-level `keydown` listener, independent of the OS-level global hook — neither required the `~` prefix (fixed v1.0.32); (2) routing between Manager and Admin was based purely on which shell tab was selected, with no OS-focus awareness, so a scan made while looking at another app could land in a leftover Admin/Inventory tab (fixed v1.0.33 via `mainWindow.isFocused()` + a `forceManager` IPC flag). **Lesson:** when multiple independent code paths can trigger the same action, a policy change must be applied to *every* path — grep the whole codebase for `addEventListener('keydown'` rather than assuming one central handler covers everything. Same lesson class as §6.10 and the diagnostics.js IIFE mistake (§11): duplicate/parallel logic paths are where policy changes silently fail to fully apply.
+
+## 8d. Barcode format reference (useful for testing/verification)
+Unique/pack barcodes are 14 digits: **4-digit lottery ID + 7-digit pack ID + 3-digit ticket number** (parsed in `lottery-manager.html` via `parseUnique()`). Must be prefixed with `~` to be recognized (§5). Example: `~27130177096052` = lottery `2713`, pack `0177096`, ticket `052`.
+
+**To generate a test barcode image:** Python's `python-barcode`, Code128 symbology (supports full ASCII incl. `~`):
+```python
+import barcode
+from barcode.writer import ImageWriter
+bc = barcode.get('code128', '~27130177096052', writer=ImageWriter())
+bc.save('test_barcode', {'module_height': 18.0, 'font_size': 12})
+```
+A phone camera scanning app (or the real scanner reading the printed/displayed code) can read it — this is how v1.0.34 was tested without the physical Netum scanner present. Phone/Bluetooth-relayed scans sometimes fail to register (see §9's Bluetooth note) — a testing-method artifact, not an app bug.
+
 ## 9. Known non-issues (don't waste time on these)
 - **Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed** — real bug, deliberately deferred, not a non-issue to silently ignore forever. Full write-up in §6.10. Only affects scanning on Admin/Inventory outside the Bulk Scan modal (does nothing, no crash) — not needed for current workflows, so left as-is for now.
 - CRLF/LF warnings from git on Windows — harmless, cosmetic.
@@ -552,10 +578,66 @@ Filterable live viewer (polls + listens for `storage` events), shows diffs as re
 - `lottery-admin.html`: both `handleBarcode()` definitions (including the known Change 1 recursion — logging it doesn't fix it, but makes it visible instead of silent).
 - All 7 files: global `window.onerror` / `unhandledrejection` capture, automatically, with no per-file setup needed beyond loading the script.
 
+### 9 real fixes made while building/testing this system (v1.0.34, found live during this system's own testing, not pre-existing regressions)
+1. `ticketHistory` (and similar capped/shifting arrays) showed noisy per-index diffs instead of a clean summary — fixed via the array append/shift detection described above.
+2. Layout inspector's only trigger (Ctrl+Shift+L) could collide with third-party software at the OS level and never reach the browser — replaced with the top-bar "🔍 Inspect" button as the primary, reliable trigger.
+3. Overflow watcher only checked the outer `.slot-card` box, missing overflow at inner elements like `.slot-name-label` masked by CSS ellipsis — extended to watch inner elements too.
+4. A single repeated/runaway log event (e.g. a recursive error firing thousands of times) could flush the entire capped ring buffer, losing all older history — now collapses into one entry with a `count` field (stress-tested with a real 7,850-iteration burst).
+5. Copy JSON silently failed inside the Diagnostics iframe due to an Electron/iframe Clipboard API focus quirk ("Document is not focused") — added a working `execCommand` fallback plus real error logging.
+6. Admin's search box rebuilt the entire table on every keystroke with no debounce, destroying any in-progress name/price cell edit mid-type — now debounced (150ms) and defers the rebuild while a cell is actively focused.
+7. Inventory's search box used trailing-only debounce, making typing feel unresponsive — changed to leading+trailing so the first keystroke updates instantly.
+8. Scans blocked for exceeding a pack's configured ticket count failed completely silently — now logged clearly (`⛔ blocked: slot #X ticket #Y exceeds pack size Z — SOLD OUT`).
+9. Turning on the layout inspector trapped ALL clicks including its own toggle and the tab bar, locking the user out — fixed via `data-diag-ui` exclusion plus Escape as an independent panic-off (both described above).
+
+A 10th issue — the periodic `.slot-name-label` flicker — was investigated and root-caused (not "fixed," see §9) via this same session's `renderGrid()` tracing work.
+
 ### Not yet built (future phases, no code exists for these)
 - **2d — Diagnostic Export + "Flag This":** bundling recent timeline + state + layout snapshot into one exportable file, plus a one-click capture button. Not started.
 - **2e — Performance Timing + Feature Watch Mode:** scan-to-render latency marks, and a filtered view scoped to one feature under test. Not started.
-- **"Major Change 1" (design only, not started):** a "Report Problem" button that auto-generates a diagnostic report and sends it directly via the Telegram Bot API (no email/WhatsApp app-switching required) to the developer's phone, with a local-file fallback if offline at the moment of sending. Requires creating a free Telegram bot via @BotFather (one-time setup, not yet done) before any code can be written. Only relevant for a single-store deployment as currently scoped — would need rework (per-store bot/token handling) if this project ever goes multi-store.
 
 ### A structural lesson learned while BUILDING this system (worth remembering for future edits to `diagnostics.js`)
 `diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to). **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**
+
+---
+
+## 12. Future ideas — brainstormed, not started (read before assuming these exist)
+
+These are **design-only discussions**, not implemented, not scoped, no code written. Logged here purely so a future chat doesn't lose the context or accidentally re-derive the same reasoning from scratch. Do not treat anything in this section as "in progress" — nothing here has been started.
+
+### Major Change 1 — Telegram-based auto diagnostic reporting
+**Goal:** let a non-technical employee report a problem with zero effort, from wherever they are, without needing to explain it or know how to use Diagnostics themselves.
+
+**Design so far:**
+- A **"Report Problem"** button in the app (exact location not yet decided — likely near Diagnostics/Inspect in the top bar).
+- On click, auto-generates a report with no typing required: recent diagnostic timeline events, any errors, app version, active tab/context, timestamp — reusing data the Diagnostics system (§11) already collects.
+- Sends the report directly via the **Telegram Bot API** (`fetch()` call from `main.js`, same pattern already used for TLC scraping in `server.js`) straight to the developer's Telegram — no email client, no WhatsApp, no manual attach-and-send.
+- Needs a graceful fallback if there's no internet at the moment of sending (save the report locally instead, with a clear "Sent ✓" / "Failed — saved locally" confirmation shown to the user).
+
+**Requires before any code can be written:** creating a free Telegram bot via @BotFather (one-time, ~2 minutes) — not yet done.
+
+**Known tradeoff:** the bot token would live in the app's source code. Fine for a single, developer-controlled store; would need real rework (per-store bot/token handling, not a shared token) if this project ever goes multi-store.
+
+**Why this over alternatives considered:**
+- A hosted "mother app"/backend that every store reports into was also discussed and explicitly rejected for now — real infrastructure to build and maintain, only pays off with multiple stores, which isn't currently on the roadmap.
+- Email/WhatsApp-based reporting (having the employee paste a summary and send it manually) was the starting point but rejected as too much manual effort/app-switching for the person reporting the issue — Telegram achieves the same "get it to the developer" goal in one click instead.
+
+### Major Change 2 — Self-contained, remotely-accessible lottery device
+**Goal:** one purpose-built device holds the entire app and all its data, physically wired to the store's display (HDMI) and scanner (USB) — fully self-contained. Remote clients (phone, laptop) access it over the network to use Manager/Inventory/Admin/etc., without the app living on their own machine at all.
+
+**Key decisions made during brainstorming (not yet built):**
+1. **Access scope:** start on same WiFi network; true remote access (different physical location) is a later phase — [Tailscale](https://tailscale.com) was identified as the practical low-effort option for that, rather than exposing a public server or building the "mother app" hosted-backend idea.
+2. **Concurrency:** multiple people should be able to view/use it at once (e.g. someone on Manager from their phone while someone else is on Admin from a laptop).
+3. **Scanner routing simplifies significantly** in this architecture: since only one physical scanner exists, wired to one device, the whole `~`-prefix / Scanner 1 vs Scanner 2 / window-focus-aware routing system (§5, §6.7–6.9) mostly becomes unnecessary — scans would default to Manager unless Inventory/Admin mode is explicitly selected on the device itself. This is a **simplification**, not a loss of functionality, if this architecture is ever pursued.
+4. **Live-sync requirement:** "refresh for latest" is acceptable — no requirement for instant push updates to every connected viewer.
+
+**The single biggest architectural implication (read this before assuming this is a simple port):** this is **NOT** "run the same app on different hardware." The current app's entire data-sharing model depends on `localStorage` being shared *because Manager/Admin/Display/etc. are all iframes inside one browser on one machine* (§5). The moment multiple separate devices (phone, laptop, the device's own attached display) need to see the same data, that mechanism stops working entirely. This requires a genuine **client-server rearchitecture**: one real shared backend/data store (e.g. SQLite or JSON files on disk) as the single source of truth, with every screen — including the device's own attached display — becoming an HTTP client fetching from that backend, not a browser tab reading its own local storage.
+
+**Open design question, not yet resolved:** if multiple people can view Admin/Inventory remotely at the same time as someone standing at the counter, whose "mode" controls what a scan means? Working assumption from brainstorming: only the physical device's own local state decides scan routing; remote viewers can only watch, not scan. Needs an explicit decision if this is ever built.
+
+**Hardware — researched and priced, not purchased:**
+- **Raspberry Pi ruled out.** It's ARM/Linux; `uiohook-napi` (the current scanner-capture library) would need porting to ARM Linux, adding real risk on top of the software rearchitecture that's already required regardless of hardware choice. No upside given a rewrite is happening either way.
+- **Recommended: an Intel N100-based x86 mini PC.** Keeps the existing Windows/Electron toolchain viable with minimal porting friction — the UI/business logic mostly carries over conceptually; only the data layer needs a genuine rewrite either way.
+- **Specific option confirmed in-stock and verified legitimate (as of this write-up):** [MINISFORUM UN100P Refurbished](https://refurbished.minisforum.com/products/minisforum-un100p-refurbished) — official manufacturer refurb storefront (not third-party), **$109** for 16GB RAM/256GB SSD. 2× HDMI 2.1 (4K@60Hz), USB-C, 3–4× USB-A ports, WiFi 6 + Bluetooth 5.2, Windows 11 pre-installed, expandable storage (up to 1TB SSD + spare SATA/microSD slots). Has real warranty/return policy and support infrastructure.
+- Budget new/ultra-cheap alternatives were researched and specifically **not** recommended: sub-$100 *new* (non-refurb) units commonly use slow eMMC storage instead of a real SSD (bad fit for an app doing constant local writes), and some ultra-budget brands (e.g. one KAMRUI unit reported in buyer discussions) have had firmware-level malware concerns. Stick to official refurb channels from known manufacturers (Minisforum, ASUS, etc.).
+
+**Nothing built:** no backend design, no client-server protocol, no auth/security model, no code, no hardware purchased. Purely theorized and priced.
