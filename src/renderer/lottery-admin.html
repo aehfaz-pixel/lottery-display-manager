@@ -650,8 +650,8 @@ function hideFetchError(){
 }
 function openAddFromError(){hideFetchError();openAdd(_lastFailedCode||undefined);}
 
-function handleBarcode(code){
-  if(window.Diag) Diag.log('none','scan','admin.handleBarcode (core) received: '+code);
+function handleBarcodeCore(code){
+  if(window.Diag) Diag.log('none','scan','admin.handleBarcodeCore received: '+code);
   document.getElementById('scanLast').textContent=code;
   hideFetchError();
   if(isPackBC(code)){
@@ -1701,7 +1701,6 @@ function bulkScanLoad(){
 }
 
 // Route scanner to bulk scan modal when open
-const _origHandleBarcode=handleBarcode;
 function handleBarcode(code){
   if(document.getElementById('bulkScanModal').style.display!=='none'){
     if(window.Diag) Diag.log('none','scan','admin.handleBarcode (modal wrapper): modal open, routed to Bulk Scan input');
@@ -1709,13 +1708,8 @@ function handleBarcode(code){
     if(inp){inp.value=code;bulkScanValidate();bulkScanAdd();}
     return;
   }
-  // KNOWN ISSUE (see Change 1 / PROJECT_STATUS.md §6.10): _origHandleBarcode
-  // does not actually reference the line-652 implementation due to function
-  // hoisting — this call recurses into itself when the modal is closed.
-  // Logged here (once, cheaply) so the recursion is visible in Diagnostics
-  // instead of failing completely silently.
-  if(window.Diag) Diag.log('none','error','admin.handleBarcode: modal closed, falling back to _origHandleBarcode — KNOWN BUG, see Change 1 (recurses)');
-  _origHandleBarcode(code);
+  if(window.Diag) Diag.log('none','scan','admin.handleBarcode (modal wrapper): modal closed, routed to core lookup');
+  handleBarcodeCore(code);
 }
 
 // ── TLC REPORT IMPORT ─────────────────────────────────────
