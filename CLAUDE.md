@@ -21,8 +21,8 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 - `indexedDB.open('lotteryImages', 2)` — every call site (10 across 7 files) must keep the `objectStoreNames.contains()` guard and `onupgradeneeded` handler.
 - `npm run dev` does NOT test the updater, window-focus routing, or auto-backup — always do a final pass on a real packaged install before calling a release verified.
 
-## Known open bug (deliberately deferred — do not "fix" unless asked)
-`lottery-admin.html` has two `function handleBarcode(code){...}` declarations in the same scope (hoisting collision) → infinite recursion when the Bulk Scan/Add Inventory modal is closed. Low impact (silent, no crash, contained to Admin/Inventory tabs). Full write-up in PROJECT_STATUS.md §6.10.
+## Recently fixed
+`lottery-admin.html`'s `handleBarcode` hoisting/recursion bug (two same-named functions causing infinite recursion when the Bulk Scan/Add Inventory modal was closed) was fixed by renaming the original implementation to `handleBarcodeCore` and having the wrapper call it directly by name. Committed `f30962d`, not yet released. Full write-up (now marked fixed) in PROJECT_STATUS.md §6.10.
 
 ## File map (what to open for what)
 | Concern | File(s) |

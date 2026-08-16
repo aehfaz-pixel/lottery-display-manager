@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Fixed: Admin's `handleBarcode` recursion bug when the Bulk Scan/Add Inventory modal is closed (deferred since v1.0.34, see `PROJECT_STATUS.md` §6.10) — scanning on Admin/Inventory now works correctly whether or not the modal is open
+
 ## v1.0.34 — 2026-08-06
 - Added a Diagnostics system: correlated real-time event timeline, global error capture, state diffing, and a cross-window layout inspector (see `PROJECT_STATUS.md` §11 for full architecture)
 - New "🩺 Diagnostics" tab in the shell + always-visible "🔍 Inspect" button in the top bar

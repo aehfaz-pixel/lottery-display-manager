@@ -247,16 +247,20 @@ bc.save('test_barcode', {'module_height': 18.0, 'font_size': 12})
 A phone camera scanning app (or the real scanner reading the printed/displayed code) can read it — this is how v1.0.34 was tested without the physical Netum scanner present. Phone/Bluetooth-relayed scans sometimes fail to register (see §9's Bluetooth note) — a testing-method artifact, not an app bug.
 
 ## 9. Known non-issues (don't waste time on these)
-- **Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed** — real bug, deliberately deferred, not a non-issue to silently ignore forever. Full write-up in §6.10. Only affects scanning on Admin/Inventory outside the Bulk Scan modal (does nothing, no crash) — not needed for current workflows, so left as-is for now.
 - CRLF/LF warnings from git on Windows — harmless, cosmetic.
 - `node_modules already used by electron-builder` warning about `electron-rebuild` — harmless, cosmetic, ignore.
 - Old GitHub releases (e.g. v1.0.9) left published without the update bar UI — harmless historical artifacts, just don't mark them "Latest."
 - **QR-code/phone-relay scanner testing showing occasional intermittent drops** — not an app bug. The global hook's burst-detection window (`BURST_MS = 50`) requires every keystroke in a scan to land within 50ms of the previous one. A real USB scanner hits this easily; a phone app relaying over Bluetooth after optical decode sometimes doesn't, causing an occasional silently-dropped scan during testing. Re-scanning normally succeeds. This is a testing-method artifact, not something to "fix" unless the *real* Netum scanner also shows drops.
 - **Periodic brief overflow/recover flicker on `.slot-name-label` for very long lottery names (found + root-caused v1.0.34, deliberately left alone)** — `lottery-manager.html`'s existing "auto-push every 10 seconds" interval (§5, silent background sync) rebuilds the whole slot grid, and for names long enough to need CSS ellipsis-truncation, the label very briefly renders at full (untruncated) width before the truncation CSS applies, then snaps back. Confirmed via the Diagnostics layout watcher — happens every ~10s for any slot with an unusually long name, self-corrects in well under a second, and is not visible to the human eye during normal use. Root cause is fully understood (see `renderGrid()`'s trace logging, added specifically to nail this down); not fixed because it's cosmetic-only and invisible in practice. If it's ever worth fixing: ensure the label is truncated correctly on its very first paint rather than rendering wide-then-shrinking.
 
-## 6.10. KNOWN OPEN BUG — Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed (found 2026-08-06, deferred)
+## 6.10. FIXED — Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed (found 2026-08-06, fixed 2026-08-16)
 
-**Status: confirmed, not yet fixed — deliberately deferred, revisit later.**
+**Status: fixed, committed (`f30962d`), not yet included in a numbered release.**
+
+### The fix applied
+Renamed the line-652 implementation to `handleBarcodeCore`, and updated the Bulk Scan wrapper (formerly ~line 1673) to call `handleBarcodeCore(code)` directly by name instead of via `_origHandleBarcode` (which the hoisting bug below had silently pointed at itself). The now-dead `const _origHandleBarcode=handleBarcode` line and the stale "KNOWN BUG" comment/log were removed. No caller changes were needed — both external callers (`lottery-admin.html`'s local keydown listener, and `lottery-app.html`'s `adm.handleBarcode(...)` shell routing) still resolve to the wrapper, which is the only function still named `handleBarcode`. Verified with `node --check` on the extracted script block; manual in-app verification of both the modal-open and modal-closed scan paths is still recommended before the next release is cut.
+
+### Original write-up (kept for context — describes the bug as it existed before the fix above)
 
 ### The bug
 `lottery-admin.html` declares `function handleBarcode(code){...}` twice:
@@ -281,10 +285,12 @@ Because JS hoists **function declarations** before any code runs, and both decla
 - Net user-visible effect: scanning a lottery on the Admin/Inventory tab while the Bulk Scan/Add Inventory modal is **closed** does nothing — no lookup, no toast, no feedback. Scanning while that modal is **open** (the actual intended workflow for adding inventory) works fine.
 - Brief CPU burn from the recursive loop before hitting the stack limit; not noticeable in practice.
 
-### Decision (2026-08-06)
-Deferred — the non-modal scan path isn't needed for current workflows (Add Inventory is always open when scanning lotteries into Admin/Inventory). Revisit and fix when convenient; two candidate fixes discussed:
+### Decision (2026-08-06, superseded 2026-08-16)
+Originally deferred — the non-modal scan path wasn't needed for current workflows (Add Inventory is always open when scanning lotteries into Admin/Inventory). Two candidate fixes were discussed:
 1. Rename the line-652 function (e.g. `handleBarcodeCore`) and have the wrapper call it directly by name — removes the shadowing bug entirely, restores the original lookup behavior for the non-modal case.
 2. Leave the lookup behavior gone and just make the non-modal branch a no-op (matches "don't need it to work" stance) — simpler, but permanently drops the standalone lottery-lookup-by-scan feature outside the modal.
+
+**Resolved 2026-08-16 using option 1** — see the fix note at the top of this section.
 **Files affected if fixed:** `lottery-admin.html` only.
 
 ## 6.5. Full backup import — CRITICAL, READ CAREFULLY
@@ -536,6 +542,11 @@ ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
 Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
 -->
 
+### Unreleased (post-v1.0.34) — 2026-08-16
+**Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround.
+**Result:** ✅ Committed (`f30962d`). `node --check` passed on the extracted script block. Not yet manually verified in a running `npm run dev` session or bumped into a numbered release — do that before shipping.
+**Files touched:** src/renderer/lottery-admin.html
+
 ---
 
 ## 11. Diagnostics System — added v1.0.34
@@ -575,7 +586,7 @@ Filterable live viewer (polls + listens for `storage` events), shows diffs as re
 ### What's instrumented right now
 - `lottery-app.html`: `routeBarcode()` (routing decisions + errors), update/IPC events.
 - `lottery-manager.html`: `handleHookBarcode()`, the ticket-update path in `globalBarcode()` (including the blocked/exceeds-pack-size branch), `renderGrid()` (logs its caller — added specifically to trace the periodic flicker, see §9).
-- `lottery-admin.html`: both `handleBarcode()` definitions (including the known Change 1 recursion — logging it doesn't fix it, but makes it visible instead of silent).
+- `lottery-admin.html`: `handleBarcodeCore()` and the `handleBarcode()` modal-routing wrapper (the wrapper's former recursion bug, §6.10, was fixed 2026-08-16).
 - All 7 files: global `window.onerror` / `unhandledrejection` capture, automatically, with no per-file setup needed beyond loading the script.
 
 ### 9 real fixes made while building/testing this system (v1.0.34, found live during this system's own testing, not pre-existing regressions)
