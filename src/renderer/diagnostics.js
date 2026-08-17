@@ -340,12 +340,64 @@
     mo.observe(document.body || document.documentElement, { childList:true, subtree:true });
   }
 
+  // ── 2d: DIAGNOSTIC EXPORT / "FLAG THIS" ─────────────────────────────────
+  // Bundles the current timeline + a few identifying details into one JSON
+  // file the employee can download and hand off, no DevTools needed.
+  function buildReport(){
+    return {
+      version: (window.electronAPI && window.electronAPI.appVersion) || 'unknown',
+      tab: TAB,
+      timestamp: new Date().toISOString(),
+      inspectMode: inspectMode,
+      recentLog: readLog(),
+    };
+  }
+
+  function exportReport(){
+    const report = buildReport();
+    const json = JSON.stringify(report, null, 2);
+    const blob = new Blob([json], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lottery-diag-report-${Date.now()}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log('none','action','Diagnostic report exported ('+report.recentLog.length+' events)');
+    return report;
+  }
+
+  // ── 2e: PERFORMANCE TIMING ──────────────────────────────────────────────
+  // Lightweight named start/end marks (performance.now()-based) for tracing
+  // scan-to-render latency. Logged as category 'perf'. A markEnd with no
+  // matching markStart is ignored rather than throwing — this is a
+  // diagnostic aid, not a critical path, and must never be able to break
+  // the app it's watching.
+  const perfMarks = new Map(); // label -> performance.now() at markStart
+
+  function markStart(label){
+    perfMarks.set(label, performance.now());
+  }
+
+  function markEnd(label){
+    const start = perfMarks.get(label);
+    if (start === undefined) return; // no matching markStart — ignore
+    perfMarks.delete(label);
+    const ms = Math.round((performance.now() - start) * 10) / 10;
+    log('none','perf', label+': '+ms+'ms');
+    return ms;
+  }
+
   window.Diag = {
     log, newAction, newId, readLog, clear, TAB,
     // 2b
     deepDiff, logDiff, snapshotKey,
     // 2c
     toggleInspect, setInspectMode, watchOverflow,
+    // 2d
+    buildReport, exportReport,
+    // 2e
+    markStart, markEnd,
   };
 
   // ── GLOBAL ERROR CAPTURE ───────────────────────────────────────────────

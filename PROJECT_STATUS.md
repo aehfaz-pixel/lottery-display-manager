@@ -258,7 +258,7 @@ A phone camera scanning app (or the real scanner reading the printed/displayed c
 **Status: fixed, committed (`f30962d`), not yet included in a numbered release.**
 
 ### The fix applied
-Renamed the line-652 implementation to `handleBarcodeCore`, and updated the Bulk Scan wrapper (formerly ~line 1673) to call `handleBarcodeCore(code)` directly by name instead of via `_origHandleBarcode` (which the hoisting bug below had silently pointed at itself). The now-dead `const _origHandleBarcode=handleBarcode` line and the stale "KNOWN BUG" comment/log were removed. No caller changes were needed — both external callers (`lottery-admin.html`'s local keydown listener, and `lottery-app.html`'s `adm.handleBarcode(...)` shell routing) still resolve to the wrapper, which is the only function still named `handleBarcode`. Verified with `node --check` on the extracted script block; manual in-app verification of both the modal-open and modal-closed scan paths is still recommended before the next release is cut.
+Renamed the line-652 implementation to `handleBarcodeCore`, and updated the Bulk Scan wrapper (formerly ~line 1673) to call `handleBarcodeCore(code)` directly by name instead of via `_origHandleBarcode` (which the hoisting bug below had silently pointed at itself). The now-dead `const _origHandleBarcode=handleBarcode` line and the stale "KNOWN BUG" comment/log were removed. No caller changes were needed — both external callers (`lottery-admin.html`'s local keydown listener, and `lottery-app.html`'s `adm.handleBarcode(...)` shell routing) still resolve to the wrapper, which is the only function still named `handleBarcode`. Verified with `node --check` on the extracted script block, and manually verified in `npm run dev` for both the modal-open and modal-closed scan paths.
 
 ### Original write-up (kept for context — describes the bug as it existed before the fix above)
 
@@ -544,7 +544,7 @@ Also remember to bump the "Current state" section (§3) at the top of this file 
 
 ### Unreleased (post-v1.0.34) — 2026-08-16
 **Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround.
-**Result:** ✅ Committed (`f30962d`). `node --check` passed on the extracted script block. Not yet manually verified in a running `npm run dev` session or bumped into a numbered release — do that before shipping.
+**Result:** ✅ Committed (`f30962d`). `node --check` passed on the extracted script block. Manually verified in a running `npm run dev` session — both modal-open and modal-closed scan paths work correctly. Holding for release with a larger change; not yet bumped into a numbered release.
 **Files touched:** src/renderer/lottery-admin.html
 
 ---

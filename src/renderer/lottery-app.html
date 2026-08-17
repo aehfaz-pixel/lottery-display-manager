@@ -81,6 +81,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ar
     <span id="versionTag" style="font-size:10px;color:var(--muted);font-family:monospace;opacity:0.6;white-space:nowrap">v1.0.34</span>
     <button class="shell-tab" style="border-bottom:none;background:var(--primary);color:#fff;border-radius:7px;height:32px;padding:0 14px" onclick="openDisplayWindow()">📺 Open Display</button>
     <button id="topInspectBtn" class="shell-tab" style="border-bottom:none;background:var(--surface);border:1px solid var(--border);border-radius:7px;height:32px;padding:0 12px" onclick="toggleInspectBtnTop()" title="Toggle click-to-inspect layout tool (works in every window)">🔍 Inspect</button>
+    <button id="topFlagBtn" class="shell-tab" style="border-bottom:none;background:var(--surface);border:1px solid var(--border);border-radius:7px;height:32px;padding:0 12px" onclick="flagThisTop()" title="Export a diagnostic report (recent events, version, timestamp) as a file">🚩 Flag This</button>
     <div class="scan-pill" id="shellScanPill"><span class="dot"></span><span id="shellScanText">Scanning active</span></div>
   </div>
   <div id="updateBar">
@@ -277,6 +278,14 @@ window.addEventListener('storage', e=>{
   if(e.key==='__diagInspectMode') updateInspectBtnTop();
 });
 updateInspectBtnTop();
+
+// ── FLAG THIS (top bar) ─────────────────────────────────────
+// Downloads a JSON diagnostic report (recent event timeline, version, tab,
+// timestamp) so a report can be handed off without opening DevTools or the
+// Diagnostics tab. See diagnostics.js Diag.exportReport().
+function flagThisTop(){
+  if(window.Diag) Diag.exportReport();
+}
 
 function installUpdateNow(){
   if(window.electronAPI && window.electronAPI.installUpdate){

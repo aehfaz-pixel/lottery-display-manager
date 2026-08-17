@@ -26,4 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkAutoBackupNeeded: () => ipcRenderer.invoke('check-auto-backup-needed'),
   saveAutoBackup: (json) => ipcRenderer.send('save-auto-backup', json),
   openBackupFolder: () => ipcRenderer.send('open-backup-folder'),
+  // App version (used by Diag.buildReport for the "Flag This" export).
+  // Plain synchronous value, not an invoke() — preload has Node access, and
+  // buildReport() is synchronous, so this avoids an unresolved-Promise bug.
+  appVersion: require('./package.json').version,
 });

@@ -1161,6 +1161,7 @@ function renderGrid(){
     }
     grid.appendChild(card);
   }
+  if(window.Diag && Diag.markEnd) Diag.markEnd('scan-to-render');
 }
 
 // ── SLOT SELECTION ────────────────────────────────────────
@@ -3897,7 +3898,10 @@ function reqBringToFront(){
 // main.js no longer forwards unprefixed (Scanner 2 / keyboard) input.
 function handleHookBarcode(code){
   code=String(code||'').trim();
-  if(window.Diag) Diag.log('none','scan','manager.handleHookBarcode received: '+code);
+  if(window.Diag){
+    Diag.log('none','scan','manager.handleHookBarcode received: '+code);
+    if(Diag.markStart) Diag.markStart('scan-to-render');
+  }
   if(!isUniqueBC(code)){
     if(window.Diag) Diag.log('none','error','manager: unrecognised lottery scanner input: '+code);
     reqBringToFront();
