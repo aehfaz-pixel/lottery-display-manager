@@ -68,6 +68,14 @@ See `PROJECT_STATUS.md` §11 for the full technical architecture if you're exten
 - Drag the display window to your TV and press F11 for fullscreen
 - Shift+A toggles a full-screen ad slideshow mode over the lottery display
 
+## TLC Lottery Data (added v1.0.37)
+
+- Scratch-off ticket data (name, price, image, pack size) is pulled from the Texas Lottery website once per lottery ID, then cached permanently — it's never re-fetched, since this data never changes once a game is published. A lottery ID may have many packs over time; they all share the same cached data.
+- **A fresh install ships pre-loaded with ~72 common lotteries already known** — no lookup needed for those on day one. A genuinely new game (not in that starter set) is looked up automatically the first time it's scanned, then cached the same way going forward.
+- Scanning a brand-new lottery ID in Add Inventory doesn't block further scanning — it shows a "🔄 Looking up..." placeholder and fills in automatically once the lookup finishes in the background.
+- Admin's "🔄 Refresh"/"Sync All" only fetches lotteries missing data — it never re-checks ones already known.
+- Inventory's "🔄 Refresh" button re-syncs each item's name/price/pack size from Admin's current data (one-way: Admin → Inventory), in addition to refreshing the view.
+
 ## Data & Backups
 
 - All data lives in `localStorage` (slots, inventory, sales log, settings) and IndexedDB (ticket/promo images), shared across all tabs since they're same-origin iframes

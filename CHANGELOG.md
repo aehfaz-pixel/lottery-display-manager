@@ -1,9 +1,23 @@
 # Changelog
 
+## v1.0.37 — 2026-08-18
+- Fixed: `fix-release.js` could match and rename/upload the wrong (stale, older-version) build if one was left over in `dist/` from a local test build — now matches strictly on the current version number and refuses to guess if no exact match is found. (This caused the bad v1.0.36 release below.)
+- Added: TLC data now caches permanently once fetched instead of re-checking every 24 hours (scratch-off data never changes once published) — see `PROJECT_STATUS.md` §12a
+- Fixed: Add Inventory could add the same physical pack twice if scanned at different ticket numbers — duplicate detection now correctly ignores the ticket-number suffix (§12b)
+- Changed: scanning a brand-new lottery ID in Add Inventory no longer blocks further scanning while looking it up — it now resolves in the background and fills in automatically (§12c)
+- Fixed: a lottery created via Inventory's background lookup could show a missing image in Admin until a manual "Sync All" — image cache now syncs automatically across tabs (§12d)
+- Changed: Inventory's "🔄 Refresh" button now also re-syncs each item's name/price/pack size from Admin's current data, not just the view (§12e)
+- Added: the app now ships with ~72 pre-loaded common lotteries (name/price/image/pack size) so a fresh install isn't TLC-dependent on day one (§12f)
+- Fixed: a major storage bloat bug — every slot was storing a full duplicate copy of its lottery's image in `localStorage`, ballooning app storage to 20MB+ and risking browser storage limits; slots now store a small reference and resolve the image at render time instead (§12g)
+- Improved: backup import now shows clearer status messages during the automatic restart, and logs the previously-silent image-restore step for easier troubleshooting (§12h)
+
+## v1.0.36 — YANKED, do not use
+Deleted from GitHub after release — the uploaded installer was accidentally a stale v1.0.35 build mislabeled as v1.0.36, due to the `fix-release.js` bug fixed in v1.0.37. If you have this version somehow, update to v1.0.37 or later.
+
 ## v1.0.35 — 2026-08-17
-- Added: Diagnostics "🚩 Flag This" button — exports a JSON report (recent event timeline, app version, tab, timestamp) with one click, no DevTools needed (see `PROJECT_STATUS.md` §11)
-- Added: Diagnostics scan-to-render performance timing — logs a `perf` entry with elapsed ms for each scan (see `PROJECT_STATUS.md` §11 for a caveat on reading these numbers with relayed/mobile scanners)
 - Fixed: Admin's `handleBarcode` recursion bug when the Bulk Scan/Add Inventory modal is closed (deferred since v1.0.34, see `PROJECT_STATUS.md` §6.10) — scanning on Admin/Inventory now works correctly whether or not the modal is open
+- Added: Diagnostics "🚩 Flag This" button — exports a JSON report (recent event timeline, app version, tab, timestamp) with one click, no DevTools needed (§11)
+- Added: Diagnostics scan-to-render performance timing — logs a `perf` entry with elapsed ms for each scan (§11)
 
 ## v1.0.34 — 2026-08-06
 - Added a Diagnostics system: correlated real-time event timeline, global error capture, state diffing, and a cross-window layout inspector (see `PROJECT_STATUS.md` §11 for full architecture)
