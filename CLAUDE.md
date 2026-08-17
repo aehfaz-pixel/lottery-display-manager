@@ -5,7 +5,7 @@
 ## What this is
 Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Node/Express backend + 7 HTML renderer files loaded as same-origin iframes sharing `localStorage`. Global OS-level keyboard hook (`uiohook-napi`) for barcode scanning. Auto-updates via GitHub Releases (`aehfaz-pixel/lottery-display-manager`, public repo).
 
-**Current version:** v1.0.34 — fully working, verified end-to-end (dev + packaged build).
+**Current version:** v1.0.35 — fully working, verified end-to-end (dev + packaged build), includes Diagnostics 2d/2e and the Admin handleBarcode fix.
 
 ## Before making any change
 1. Read `PROJECT_STATUS.md` in full — it has architecture, file map, full bug history, and the Diagnostics system (§11) and future-ideas brainstorm (§12).
@@ -21,12 +21,10 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 - `indexedDB.open('lotteryImages', 2)` — every call site (10 across 7 files) must keep the `objectStoreNames.contains()` guard and `onupgradeneeded` handler.
 - `npm run dev` does NOT test the updater, window-focus routing, or auto-backup — always do a final pass on a real packaged install before calling a release verified.
 
-## Recently fixed
+## Recently fixed (v1.0.35, released 2026-08-17)
 `lottery-admin.html`'s `handleBarcode` hoisting/recursion bug (two same-named functions causing infinite recursion when the Bulk Scan/Add Inventory modal was closed) was fixed by renaming the original implementation to `handleBarcodeCore` and having the wrapper call it directly by name. Full write-up in PROJECT_STATUS.md §6.10.
 
-Diagnostics phases 2d (Diagnostic Export / "Flag This") and 2e (scan-to-render perf timing) are now implemented and tested. Full write-up in PROJECT_STATUS.md §11. **Important lesson from this work:** `preload.js`'s `require()` is sandboxed to a whitelist (`electron`, Node built-ins) — a relative-path `require('./package.json')` threw and silently killed the entire `contextBridge.exposeInMainWorld({...})` call, breaking all of `window.electronAPI`. Treat any `preload.js` edit as high-risk; verify `window.electronAPI` is still a populated object in the DevTools console after any change there, not just `node --check`.
-
-Holding for release bundled with the handleBarcode fix above — not yet bumped into a numbered version as of this writing.
+Diagnostics phases 2d (Diagnostic Export / "Flag This") and 2e (scan-to-render perf timing) shipped in the same release. Full write-up in PROJECT_STATUS.md §11. **Important lesson from this work:** `preload.js`'s `require()` is sandboxed to a whitelist (`electron`, Node built-ins) — a relative-path `require('./package.json')` threw and silently killed the entire `contextBridge.exposeInMainWorld({...})` call, breaking all of `window.electronAPI`. Treat any `preload.js` edit as high-risk; verify `window.electronAPI` is still a populated object in the DevTools console after any change there, not just `node --check`.
 
 ## File map (what to open for what)
 | Concern | File(s) |

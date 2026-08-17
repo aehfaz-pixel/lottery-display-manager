@@ -542,9 +542,9 @@ ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
 Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
 -->
 
-### Unreleased (post-v1.0.34) — 2026-08-16
-**Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround.
-**Result:** ✅ Committed (`f30962d`). `node --check` passed on the extracted script block. Manually verified in a running `npm run dev` session — both modal-open and modal-closed scan paths work correctly. Holding for release with a larger change; not yet bumped into a numbered release.
+### v1.0.35 — 2026-08-17 — RELEASED
+**Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround. Bundled with Diagnostics phases 2d/2e (§11) in the same release.
+**Result:** ✅ Committed (`f30962d`), released as v1.0.35. Manually verified in `npm run dev` across multiple fresh sessions — both modal-open and modal-closed scan paths work correctly, including a final pre-release confirmation with no console errors after scanning Admin with the modal closed.
 **Files touched:** src/renderer/lottery-admin.html
 
 ---
@@ -604,7 +604,7 @@ Filterable live viewer (polls + listens for `storage` events), shows diffs as re
 
 A 10th issue — the periodic `.slot-name-label` flicker — was investigated and root-caused (not "fixed," see §9) via this same session's `renderGrid()` tracing work.
 
-### 2d & 2e — Diagnostic Export + Performance Timing — DONE (2026-08-17)
+### 2d & 2e — Diagnostic Export + Performance Timing — DONE, released v1.0.35 (2026-08-17)
 **2d — Diagnostic Export / "Flag This":** `Diag.buildReport()` bundles version, tab, timestamp, inspect-mode state, and the recent event timeline into one object; `Diag.exportReport()` downloads it as `lottery-diag-report-<timestamp>.json` via a Blob/`<a download>`, no server or DevTools needed. Triggered by a new "🚩 Flag This" button in the shell's top bar, next to 🔍 Inspect.
 
 **2e — Performance Timing (scan-to-render only; Feature Watch Mode not yet built, see below):** `Diag.markStart(label)` / `Diag.markEnd(label)` use `performance.now()` to log a `perf`-category entry with elapsed ms. Wired around the scan path: `markStart('scan-to-render')` in `lottery-manager.html`'s `handleHookBarcode()`, `markEnd('scan-to-render')` at the end of `renderGrid()`. A `markEnd` with no matching `markStart` silently no-ops (e.g. a non-scan-triggered render like clicking a slot) — this is intentional, not a bug.
