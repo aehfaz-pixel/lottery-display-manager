@@ -1713,7 +1713,15 @@ function enrichSlots(){
       const lot=db.lotteries.find(l=>l.id===slot.lotteryDbId);
       if(lot){
         slot._name=lot.name; slot._price=lot.price;
-        slot._image=resolveImg(lot.image);
+        // Store only the small idb: reference (e.g. "idb:abc123"), NOT the
+        // fully resolved base64 data URL. Persisting the resolved image
+        // duplicated it into every slot's saved record, ballooning
+        // lotteryApp_slots to 10s of MB and risking localStorage quota
+        // issues. Manager's own rendering never reads slot._image (it
+        // resolves images live via resolveImg(lot.image) in renderGrid) —
+        // this field exists only for lottery-display.html, which now
+        // resolves it itself at render time via its own imgCache.
+        slot._image=lot.image;
         if(slot.packId){
           const t=getTotalTicketsWithInvFallback(lot,slot); if(t) slot.totalTickets=t;
         }

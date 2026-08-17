@@ -566,33 +566,42 @@ async function importFullBackup(input){
     }
     if(backup.indexedDB?.[IDB_NAME]){
       setBackupStatus('Restoring images…');
+      if(dlogAPI) dlogAPI('importFullBackup: starting IndexedDB restore, stores: '+Object.keys(backup.indexedDB[IDB_NAME]).join(','));
       try{
         const db=await new Promise((res,rej)=>{
           const r=indexedDB.open(IDB_NAME,2);
           r.onupgradeneeded=e=>IDB_STORES.forEach(s=>{if(!e.target.result.objectStoreNames.contains(s))e.target.result.createObjectStore(s);});
           r.onsuccess=e=>res(e.target.result);r.onerror=rej;
         });
+        if(dlogAPI) dlogAPI('importFullBackup: IDB opened');
         for(const store of IDB_STORES){
           if(!backup.indexedDB[IDB_NAME][store]) continue;
+          const entries=Object.entries(backup.indexedDB[IDB_NAME][store]);
+          if(dlogAPI) dlogAPI(`importFullBackup: restoring store "${store}", ${entries.length} entries`);
+          const t0=Date.now();
           await new Promise((res,rej)=>{
             const tx=db.transaction(store,'readwrite');
             const os=tx.objectStore(store);os.clear();
-            const entries=Object.entries(backup.indexedDB[IDB_NAME][store]);
             if(!entries.length){res();return;}
             let done=0;
             entries.forEach(([k,v])=>{const r=os.put(v,k);r.onsuccess=()=>{if(++done===entries.length)res();};r.onerror=rej;});
           });
+          if(dlogAPI) dlogAPI(`importFullBackup: store "${store}" done in ${Date.now()-t0}ms`);
         }
-      }catch(e){console.warn('IDB restore partial:',e);}
+        if(dlogAPI) dlogAPI('importFullBackup: IndexedDB restore complete');
+      }catch(e){
+        console.warn('IDB restore partial:',e);
+        if(dlogAPI) dlogAPI('importFullBackup: IDB restore ERROR: '+(e&&e.message?e.message:String(e)));
+      }
     }
-    setBackupStatus('✓ Import complete — reloading…','var(--success)');
+    setBackupStatus('✓ Import complete — restarting app in a few seconds…','var(--success)');
     setTimeout(()=>{
       try{
         if(window.top && window.top.electronAPI && window.top.electronAPI.restartAppForImport){
-          setBackupStatus('✓ Import complete — restarting app…','var(--success)');
+          setBackupStatus('⏳ Restarting now — window will close and reopen automatically. Please wait, do not close it manually.','var(--success)');
           window.top.electronAPI.restartAppForImport();
         } else if(window.electronAPI && window.electronAPI.restartAppForImport){
-          setBackupStatus('✓ Import complete — restarting app…','var(--success)');
+          setBackupStatus('⏳ Restarting now — window will close and reopen automatically. Please wait, do not close it manually.','var(--success)');
           window.electronAPI.restartAppForImport();
         } else if(window.top && window.top.electronAPI && window.top.electronAPI.fullWindowReload){
           window.top.electronAPI.fullWindowReload();

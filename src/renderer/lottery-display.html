@@ -295,6 +295,41 @@ body.portrait #gridWrap.has-featured{flex-direction:column;}
 <script>
 const SLOTS_KEY='lotteryApp_slots',PROMO_KEY='lotteryApp_promo',DCFG_KEY='lotteryApp_display_cfg';
 
+// ── INDEXEDDB IMAGE CACHE (read-only; Admin writes) ────────
+// slot._image now only carries a small "idb:ID" reference (see Manager's
+// enrichSlots()), not the fully resolved image — resolve it here instead,
+// same read-only pattern already used by Manager/Admin/Home against the
+// same shared IndexedDB store.
+const _DISP_IMG_DB='lotteryImages',_DISP_IMG_STORE='images';
+const imgCache={};
+let _idbReady=null;
+function openImgDB(){
+  if(_idbReady) return _idbReady;
+  _idbReady=new Promise((res,rej)=>{
+    const req=indexedDB.open(_DISP_IMG_DB,2);
+    req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains(_DISP_IMG_STORE))e.target.result.createObjectStore(_DISP_IMG_STORE);};
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e.target.error);
+  });
+  return _idbReady;
+}
+function resolveImg(img){
+  if(!img) return null;
+  if(typeof img==='string'&&img.startsWith('idb:')) return imgCache[img.slice(4)]||null;
+  return img;
+}
+async function warmImgCache(){
+  try{
+    const idb=await openImgDB();
+    await new Promise((res,rej)=>{
+      const result={};
+      const cur=idb.transaction(_DISP_IMG_STORE,'readonly').objectStore(_DISP_IMG_STORE).openCursor();
+      cur.onsuccess=e=>{const c=e.target.result;if(c){result[c.key]=c.value;c.continue();}else{Object.assign(imgCache,result);res();}};
+      cur.onerror=e=>rej(e.target.error);
+    });
+  }catch(e){console.warn('Display IDB warm failed',e);}
+}
+
 function loadSlots(){try{const r=localStorage.getItem(SLOTS_KEY);return r?JSON.parse(r):{version:1,slots:[]}}catch{return{version:1,slots:[]}}}
 function loadPromo(){try{const r=localStorage.getItem(PROMO_KEY);return r?JSON.parse(r):{enabled:false,image:null,text:'',textSize:'md'}}catch{return{enabled:false,image:null,text:'',textSize:'md'}}}
 function loadDisplayCfg(){
@@ -978,15 +1013,17 @@ function renderGrid(){
 
     // Inner cell = image area
     const cell=document.createElement('div');
+    // slot._image now only carries an "idb:ID" reference — resolve it here.
+    const resolvedImg=resolveImg(slot._image);
     // Sold-out slots display as empty on TV
-    const showAsEmpty=isSoldOut||!slot._image;
+    const showAsEmpty=isSoldOut||!resolvedImg;
     cell.className='cell'+(showAsEmpty?' empty':'');
 
     if(!isSoldOut){
-      if(slot._image){
+      if(resolvedImg){
         const imgEl=document.createElement('img');
         imgEl.className='cell-img';
-        imgEl.src=slot._image;imgEl.alt=slot._name||'';
+        imgEl.src=resolvedImg;imgEl.alt=slot._name||'';
         imgEl.onerror=()=>{imgEl.remove();showPh(cell,slot.slotNumber);};
         cell.appendChild(imgEl);
       } else {
@@ -1099,12 +1136,13 @@ function renderFeatured(){
     wrap.style.cssText=`width:${featSize}px;height:${featSize}px;flex-shrink:0;`;
 
     const cell=document.createElement('div');
-    const showEmpty=!slot||isSoldOut||!slot._image;
+    const featResolvedImg=slot?resolveImg(slot._image):null;
+    const showEmpty=!slot||isSoldOut||!featResolvedImg;
     cell.className='cell'+(showEmpty?' empty':'');
-    if(slot&&!isSoldOut&&slot._image){
+    if(slot&&!isSoldOut&&featResolvedImg){
       const img=document.createElement('img');
       img.className='cell-img';
-      img.src=slot._image; img.alt=slot._name||'';
+      img.src=featResolvedImg; img.alt=slot._name||'';
       img.onerror=()=>{img.remove();showPh(cell,slotNum);};
       cell.appendChild(img);
     } else {
@@ -1356,6 +1394,7 @@ function stopSpotlightTimer(){
 applyDisplayCfg();
 syncAdFromStorage();
 fullRender();
+warmImgCache().then(()=>{fullRender();}); // re-render once images are resolvable
 restartSpotlightIfNeeded();
 if(window.Diag) Diag.watchOverflow('.lotto-card');
 

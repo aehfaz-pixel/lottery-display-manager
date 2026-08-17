@@ -377,12 +377,15 @@ ipcMain.on('open-backup-folder', () => {
 });
 
 ipcMain.on('app-restart-for-import', () => {
+  debugLog('RESTART: app-restart-for-import received, flushing storage');
   const doRestart = () => {
+    debugLog('RESTART: calling app.relaunch() + app.exit(0) now');
     app.relaunch();
     app.exit(0);
   };
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.session.flushStorageData();
+    debugLog('RESTART: flushStorageData() called (fire-and-forget, non-blocking), waiting 2s before relaunch');
     setTimeout(doRestart, 2000);
   } else {
     doRestart();

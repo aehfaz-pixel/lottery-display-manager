@@ -309,7 +309,11 @@ function loadStats(){
     const lid=slot.lotteryDbId;
     if(!groups[lid]){
       const lot=lotteryMap[slot.lotteryId||''];
-      const img=slot._image||resolveImg(lot?.image)||null;
+      // slot._image now only carries a small "idb:ID" reference (see
+      // Manager's enrichSlots()), not a ready-to-use image — must resolve
+      // it here, same as lot?.image. Using it directly caused broken
+      // "idb:xxxxx" image URLs after that change.
+      const img=resolveImg(slot._image)||resolveImg(lot?.image)||null;
       const price=slot._price||lot?.price||'';
       groups[lid]={image:img,price,slots:[]};
     }
