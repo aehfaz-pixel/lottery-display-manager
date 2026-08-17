@@ -5,10 +5,10 @@
 ## What this is
 Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Node/Express backend + 7 HTML renderer files loaded as same-origin iframes sharing `localStorage`. Global OS-level keyboard hook (`uiohook-napi`) for barcode scanning. Auto-updates via GitHub Releases (`aehfaz-pixel/lottery-display-manager`, public repo).
 
-**Current version:** v1.0.35 — fully working, verified end-to-end (dev + packaged build), includes Diagnostics 2d/2e and the Admin handleBarcode fix.
+**Current version:** v1.0.37 — fully working, verified end-to-end (dev + packaged build + real installed-app auto-update test).
 
 ## Before making any change
-1. Read `PROJECT_STATUS.md` in full — it has architecture, file map, full bug history, and the Diagnostics system (§11) and future-ideas brainstorm (§12).
+1. Read `PROJECT_STATUS.md` in full — it has architecture, file map, full bug history, the Diagnostics system (§11), the TLC/storage/release-pipeline overhaul (§12 — read this before touching Admin/Inventory/Manager/Display/Home or `fix-release.js`), and pure future-ideas brainstorm (§13).
 2. Read the specific file(s) you're about to touch — don't edit from memory of the summary.
 3. After editing `diagnostics.js` (or any large single-scope/IIFE file): run `node --check <file>` immediately, before further edits. A prior `str_replace` once silently closed the IIFE early — caught only by this check.
 4. Confirm with the user before anything destructive, before a release (`npm run release`), or before touching the invariants below.
@@ -20,11 +20,13 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 - Scan routing: only `~`-prefixed input may trigger app actions. If you add or touch any `keydown` listener, grep the whole codebase for `addEventListener('keydown'` first — there are multiple independent listeners (OS-level global hook + per-file local fallbacks) and a policy change must be applied to all of them.
 - `indexedDB.open('lotteryImages', 2)` — every call site (10 across 7 files) must keep the `objectStoreNames.contains()` guard and `onupgradeneeded` handler.
 - `npm run dev` does NOT test the updater, window-focus routing, or auto-backup — always do a final pass on a real packaged install before calling a release verified.
+- `fix-release.js` matches dist files by the CURRENT version number specifically (`require('./package.json').version`) — this is load-bearing. A real incident shipped a stale build under the wrong version tag when this used a loose pattern instead. **Always clear `dist/*.exe`, `dist/*.blockmap`, `dist/*.yml` before a real release**, especially after any local-only test build (`electron-builder --publish never` skips this script entirely, leaving an un-renamed, ambiguous leftover file).
+- `slot._image` (in `lotteryApp_slots`) only ever holds a small `idb:ID` reference, NEVER a fully resolved image — any consumer (Manager/Display/Home) must call its own `resolveImg()` on it before use. Persisting the resolved image directly was the root cause of a real ~22MB storage bloat bug (§12g). Manager's own rendering never reads `slot._image` at all (resolves live from `db.lotteries` instead) — it exists purely for Display/Home's benefit.
 
-## Recently fixed (v1.0.35, released 2026-08-17)
-`lottery-admin.html`'s `handleBarcode` hoisting/recursion bug (two same-named functions causing infinite recursion when the Bulk Scan/Add Inventory modal was closed) was fixed by renaming the original implementation to `handleBarcodeCore` and having the wrapper call it directly by name. Full write-up in PROJECT_STATUS.md §6.10.
-
-Diagnostics phases 2d (Diagnostic Export / "Flag This") and 2e (scan-to-render perf timing) shipped in the same release. Full write-up in PROJECT_STATUS.md §11. **Important lesson from this work:** `preload.js`'s `require()` is sandboxed to a whitelist (`electron`, Node built-ins) — a relative-path `require('./package.json')` threw and silently killed the entire `contextBridge.exposeInMainWorld({...})` call, breaking all of `window.electronAPI`. Treat any `preload.js` edit as high-risk; verify `window.electronAPI` is still a populated object in the DevTools console after any change there, not just `node --check`.
+## Recently fixed (v1.0.35–v1.0.37)
+- `lottery-admin.html`'s `handleBarcode` hoisting/recursion bug — fixed in v1.0.35. Full write-up in PROJECT_STATUS.md §6.10.
+- A large TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, and a critical `fix-release.js` release-pipeline bug (which shipped a stale build under a wrong version tag in a real incident — caught and cleaned up before it reached any real user) — all in v1.0.37. Full write-up in PROJECT_STATUS.md §12 (12a–12i). If working on Admin, Inventory, Manager, Display, Home, or the release pipeline, read §12 first.
+- **Open follow-up, not yet root-caused:** a report of one backup import "faltering" then a retry working quickly, after the §12h messaging/logging fix shipped. Check the debug log for that specific incident if it recurs — see §12h's last paragraph.
 
 ## File map (what to open for what)
 | Concern | File(s) |

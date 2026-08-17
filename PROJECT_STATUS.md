@@ -31,8 +31,8 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.34
-- **Status:** ✅ Fully working — everything from v1.0.33 (build, publish, auto-update, full-backup-import, promo image storage, daily auto-backup, scanner routing) still confirmed functional, PLUS a new Diagnostics system (see §11) — all verified end-to-end on both dev environment and the real packaged v1.0.34 build.
+- **Version:** v1.0.37
+- **Status:** ✅ Fully working — everything from v1.0.34 still confirmed functional, PLUS a major TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, and a critical release-pipeline bug fix (see §12 for full write-up) — all verified end-to-end on dev and real packaged/installed builds, including a live auto-update test from v1.0.35 → v1.0.37.
 - **Git:** Repo tracked, pushed to `origin/main`. Run `git log -1` to confirm the current commit hash — this file isn't auto-updated with it.
 - **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version.
 - **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data — verified with 86 real slots on 2 separate fresh devices, and again during the v1.0.29→v1.0.30 device migration.
@@ -542,9 +542,9 @@ ADD NEW ENTRIES BELOW THIS LINE, MOST RECENT AT THE BOTTOM.
 Also remember to bump the "Current state" section (§3) at the top of this file after each verified release.
 -->
 
-### v1.0.35 — 2026-08-17 — RELEASED
-**Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround. Bundled with Diagnostics phases 2d/2e (§11) in the same release.
-**Result:** ✅ Committed (`f30962d`), released as v1.0.35. Manually verified in `npm run dev` across multiple fresh sessions — both modal-open and modal-closed scan paths work correctly, including a final pre-release confirmation with no console errors after scanning Admin with the modal closed.
+### Unreleased (post-v1.0.34) — 2026-08-16
+**Change:** Fixed the Admin `handleBarcode` infinite recursion bug (§6.10), deferred since v1.0.34. Renamed the original implementation to `handleBarcodeCore`; the Bulk Scan modal wrapper now calls it directly by name instead of via the broken `_origHandleBarcode` hoisting workaround.
+**Result:** ✅ Committed (`f30962d`). `node --check` passed on the extracted script block. Manually verified in a running `npm run dev` session — both modal-open and modal-closed scan paths work correctly. Holding for release with a larger change; not yet bumped into a numbered release.
 **Files touched:** src/renderer/lottery-admin.html
 
 ---
@@ -563,8 +563,6 @@ Diag.deepDiff(before, after)                          // the underlying diff alg
 Diag.toggleInspect() / Diag.setInspectMode(bool)      // layout inspector on/off (global, cross-window)
 Diag.watchOverflow(cssSelector)                       // passive overflow watcher for given selector(s)
 Diag.readLog() / Diag.clear()                         // read or wipe the ring buffer
-Diag.buildReport() / Diag.exportReport()               // 2d: bundle + download a diagnostic report JSON
-Diag.markStart(label) / Diag.markEnd(label)            // 2e: performance.now()-based timing, logs a 'perf' entry
 ```
 Categories in use: `scan`, `route`, `state`, `ipc`, `error`, `info`, `layout`, `action`.
 
@@ -604,26 +602,74 @@ Filterable live viewer (polls + listens for `storage` events), shows diffs as re
 
 A 10th issue — the periodic `.slot-name-label` flicker — was investigated and root-caused (not "fixed," see §9) via this same session's `renderGrid()` tracing work.
 
-### 2d & 2e — Diagnostic Export + Performance Timing — DONE, released v1.0.35 (2026-08-17)
-**2d — Diagnostic Export / "Flag This":** `Diag.buildReport()` bundles version, tab, timestamp, inspect-mode state, and the recent event timeline into one object; `Diag.exportReport()` downloads it as `lottery-diag-report-<timestamp>.json` via a Blob/`<a download>`, no server or DevTools needed. Triggered by a new "🚩 Flag This" button in the shell's top bar, next to 🔍 Inspect.
-
-**2e — Performance Timing (scan-to-render only; Feature Watch Mode not yet built, see below):** `Diag.markStart(label)` / `Diag.markEnd(label)` use `performance.now()` to log a `perf`-category entry with elapsed ms. Wired around the scan path: `markStart('scan-to-render')` in `lottery-manager.html`'s `handleHookBarcode()`, `markEnd('scan-to-render')` at the end of `renderGrid()`. A `markEnd` with no matching `markStart` silently no-ops (e.g. a non-scan-triggered render like clicking a slot) — this is intentional, not a bug.
-
-**Caveat, confirmed in testing:** the perf mark measures wall-clock time until the *next* `renderGrid()` call, whatever triggers it — not pure processing time. A scan that doesn't match any slot's pack ID (or arrives while the app lacks OS focus, e.g. from a phone/Bluetooth-relayed scanner) can show an inflated number (one real test case: 3019.7ms) reflecting focus-regain/UI delay, not actual slowness. Normal matched scans consistently show single-digit ms. Don't treat an occasional large number here as a performance regression without checking the surrounding `route`/`state` log entries for context first.
-
-**Files touched:** `diagnostics.js` (`buildReport`, `exportReport`, `markStart`, `markEnd`, added to `window.Diag`), `lottery-app.html` (Flag This button + `flagThisTop()`), `lottery-manager.html` (mark calls in `handleHookBarcode`/`renderGrid`), `preload.js` (`appVersion`), `main.js` (`get-app-version-sync` IPC handler).
-
-**Regression caught and fixed during this work:** the first `appVersion` implementation used `require('./package.json')` directly in `preload.js`. Electron's preload sandbox only allows a small whitelist of built-in modules — arbitrary relative-path `require()` calls throw, and that throw silently killed the *entire* `contextBridge.exposeInMainWorld({...})` call, wiping out all of `window.electronAPI` (barcode routing, auto-update, backups — everything). Caught via manual testing (`window.electronAPI` was `undefined` in the console) before it went anywhere near a release. Fixed by using `ipcRenderer.sendSync('get-app-version-sync')` instead, with a matching `ipcMain.on` handler in `main.js` that has real Node/Electron access. **Lesson: preload.js's `require()` is sandboxed to a module whitelist (`electron`, Node built-ins) — never assume arbitrary relative-path requires work there, and treat any preload edit as high-risk, since a throw there can silently break the entire renderer↔main bridge with no error surfaced anywhere except the DevTools console.**
-
-**Not yet built:**
-- **Feature Watch Mode** (the other half of 2e) — a text-filter input in `lottery-diagnostics.html` to narrow the live timeline to entries matching a substring (e.g. "renderGrid"). Purely a `lottery-diagnostics.html` UI addition, no `diagnostics.js` dependency. Not started.
+### Not yet built (future phases, no code exists for these)
+- **2d — Diagnostic Export + "Flag This":** bundling recent timeline + state + layout snapshot into one exportable file, plus a one-click capture button. Not started.
+- **2e — Performance Timing + Feature Watch Mode:** scan-to-render latency marks, and a filtered view scoped to one feature under test. Not started.
 
 ### A structural lesson learned while BUILDING this system (worth remembering for future edits to `diagnostics.js`)
-`diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to) and the preload `require()` regression above. **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**
+`diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to). **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**
 
 ---
 
-## 12. Future ideas — brainstormed, not started (read before assuming these exist)
+## 12. TLC/Admin/Inventory Reliability Overhaul + Storage Bloat Fix + Release Pipeline Fix — v1.0.37 (2026-08-17/18)
+
+A large, multi-part session covering real reported bugs, a genuine architectural fix, and a critical release-pipeline safety bug. Everything below is DONE and shipped in v1.0.37, fully tested end-to-end including on a real installed app receiving a real auto-update.
+
+### 12a. TLC caching — existence-based, not time-based
+**Problem:** `lottery-admin.html`'s `syncLotteryTlc()`/`syncAllTlc()` used a 24-hour TTL (`TLC_TTL`), causing every lottery to silently re-hit TLC once a day even though scratch-off data (name/price/pack size/image) never changes once published.
+**Fix:** replaced the TTL check with `isLotteryTlcDataComplete(l)` — skips a lottery only if it already has name+price+pack size+image, regardless of age. `force=true` (from an explicit re-check) still bypasses this. `syncAllTlc()` (the "Refresh All" button) is now purely gap-fill: only fetches lotteries missing data, never re-fetches complete ones.
+
+### 12b. Add Inventory duplicate detection — fixed to ignore ticket number
+**Problem:** `bulkScanValidate()`/`bulkScanAdd()` compared the full 14-digit barcode for duplicates, so the same physical pack scanned with two different ticket-number suffixes (e.g. `...001` then `...023`) wasn't recognized as a duplicate and could be added twice.
+**Fix:** duplicate comparison now uses only the first 11 digits (lottery ID + pack ID), ignoring the ticket-number suffix. Confirmed safe against `uniquePackId` matching elsewhere in the codebase, which already used the same 11-digit convention.
+
+### 12c. Add Inventory — non-blocking lookups for brand-new lottery IDs
+**Problem:** scanning a lottery ID not yet in Admin's DB triggered a *blocking* `await` on a TLC lookup inside `bulkScanAdd()`, freezing that scan (and effectively the whole rapid-scan workflow) for however long the lookup took.
+**Fix:** `bulkScanAdd()` is no longer `async`. Unknown lottery IDs get an immediate `pending`-status placeholder row (`🔄 Looking up #XXXX...`) in the queue, and the scan input is free instantly. A new `resolveNewLotteryForQueue(lotteryId)` runs the lookup in the background; a `pendingTlcLookups` map ensures multiple scans of the *same* new lottery ID (e.g. two packs of a brand-new game scanned back to back) share one lookup instead of firing duplicate TLC requests. On success, every matching `pending` row updates in place. On failure, rows show `⚠ Failed — Retry` (new `bulkScanRetryLookup()`). `bulkScanLoad()` only loads `ok`-status items into real Inventory — `pending`/`error` rows stay queued rather than being silently dropped or loaded incomplete.
+
+### 12d. Cross-frame image cache sync (Admin ↔ Inventory)
+**Root cause found:** `lottery-admin.html` runs as two separate iframe instances (`#tab=db` Admin, `#tab=inv` Inventory), each with independent in-memory state. A pre-existing `BroadcastChannel`-based sync (`_dbSync`) already reloaded `db` across frames on save, but never re-warmed `imgCache` — so a lottery created in Inventory's context (via 12c above) would show correct name/price in Admin but a missing image, until something else (like "Sync All") happened to re-fetch it into Admin's own cache.
+**Fix:** `_dbSync.onmessage` now also calls `warmImgCache()` before re-rendering, so newly-created images appear immediately in every open frame, not just the one that created them.
+
+### 12e. Inventory "Refresh" — repurposed to do a real Admin resync
+**Found:** Inventory already had a "🔄 Refresh" button, but it only re-rendered the current view (re-pulled from `localStorage` + Manager slot-matching status) — it never re-synced individual items' stored name/price/pack-size snapshots from Admin's current data.
+**Fix:** new `refreshInventoryFromAdmin()` does a one-way resync (Admin → Inventory only, never the reverse) of every existing Inventory item's snapshot, then the original view-refresh still runs. New `refreshInventoryClick()` combines both with a toast summarizing how many items actually changed.
+
+### 12f. Seed data — 72 pre-loaded lotteries, ships with the app
+**Design:** a static `src/renderer/tlc-seed-data.json` (built from a real device's 80-lottery backup, cleaned to 72 unique entries after removing 6 with no valid image and 2 duplicate `lotteryId` entries) pre-populates a fresh install's Admin DB on first launch — no TLC calls needed for those 72 out of the box. Images resized to ~1000px max dimension, ~90% JPEG quality (18MB → ~11MB) — enough headroom for Display's larger `object-fit:cover` rendering while still trimming real weight.
+**Loading logic (`loadSeedDataIfNeeded()` in `lottery-admin.html`):** gated by a `lotteryApp_seedLoaded` localStorage flag (not lottery count, so a manually-cleared DB is never re-seeded), and only runs from the Admin (`#tab=db`) iframe instance specifically, to avoid a duplicate-seeding race with the Inventory iframe on a truly fresh install. On fetch/parse failure, the flag is deliberately left unset so seeding retries on next launch.
+**Note:** this cache is genuinely permanent per the "fetch once, cache forever" principle — a lottery ID can have many packs over time (different pack barcodes), all sharing the same name/price/image/pack-size, so the cache key is the lottery ID, never the pack ID.
+
+### 12g. Storage bloat — root cause found and fixed (~22MB → ~3MB in `localStorage`)
+**Root cause:** `lottery-manager.html`'s `enrichSlots()` was setting `slot._image = resolveImg(lot.image)` — the FULLY RESOLVED base64 image data URL, not the small `idb:ID` reference — directly onto every slot object, which then got persisted to `localStorage['lotteryApp_slots']` on every save. Every slot with an active lottery carried its own full copy of that lottery's image, duplicating potentially hundreds of KB per slot into `localStorage` repeatedly (the existing 10-second auto-push interval saves continuously). Manager's own rendering never actually reads `slot._image` at all — it always resolves images live from `db.lotteries` — so this field existed purely for `lottery-display.html`'s benefit.
+**Fix:**
+- `lottery-manager.html`: `enrichSlots()` now stores only `lot.image` (the small `idb:ID` string) on `slot._image`.
+- `lottery-display.html`: **had no independent image-resolving capability at all** (unlike Manager/Admin/Home, which each already had their own read-only `imgCache`/`resolveImg`/`warmImgCache` against the shared `lotteryImages` IndexedDB store). Added the same pattern; both slot-rendering call sites (main grid + featured/spotlight) now call `resolveImg(slot._image)` at render time instead of using it directly.
+- `lottery-home.html`: **already had its own `resolveImg()`, but wasn't calling it on `slot._image`** in `loadStats()` — `const img=slot._image||resolveImg(lot?.image)||null;` used the unresolved reference directly. One-line fix: `resolveImg(slot._image)||resolveImg(lot?.image)||null`.
+- Grep-confirmed no other file/consumer of `slot._image` exists anywhere in the codebase.
+- **Self-healing, no migration needed** — Manager's existing 10-second auto-push interval already calls `enrichSlots()`+`saveSlots()` continuously, so any device upgrading to this version shrinks its own bloated `lotteryApp_slots` automatically within ~10 seconds of the app running.
+- **Note on backup size:** a `.lotterybackup` export legitimately includes full IndexedDB image data (one copy per distinct lottery, not per slot) — a ~20MB+ backup after this fix is normal/expected if you have many distinct ticket images (real + seed data), NOT a sign of the bug recurring. The fix only eliminated *duplicated* images across slots in `localStorage`, not the legitimate one-copy-per-lottery IndexedDB data.
+
+### 12h. Backup import — investigated apparent "hangs," added diagnostics + clearer messaging
+**Investigated:** `main.js`'s `app-restart-for-import` handler uses `session.flushStorageData()` (synchronous, fire-and-forget, not a Promise) followed by a fixed 2000ms `setTimeout` before `app.relaunch()`+`app.exit(0)`; the renderer side (`lottery-repository.html`) has its own fixed 1200ms `setTimeout` before sending that IPC. Total expected time ≈ 3.2s + normal overhead — confirmed by log evidence matching this almost exactly in the one case where nothing was manually interrupted. **The mechanism itself works correctly; apparent multi-minute "hangs" in testing were most likely the developer manually killing and restarting the process** after understandably assuming a freeze, since there was zero on-screen feedback once the window closes.
+**Fixes (safety + visibility, not a behavior change):**
+- `lottery-repository.html`: added full diagnostic logging throughout the previously-completely-silent IndexedDB restore block (which store, entry count, timing per store, explicit error logging) — before this, that block's only error handling was `console.warn`, invisible in a packaged app with DevTools closed.
+- Status messaging changed to explicitly say the window will close and reopen automatically and instruct the user **not to close it manually** — directly targeting the "looks frozen, so I killed it" reflex that most likely caused the perceived hangs.
+- `main.js`: added `debugLog()` calls around the restart sequence (`flushStorageData()` called, waiting 2s, calling `relaunch()`) for full certainty in any future investigation.
+**Not fully closed out:** a follow-up report of one import "faltering" then a retry working quickly came in after this fix shipped — not yet root-caused, debug log for that specific incident not yet reviewed. **Check this next if it recurs.**
+
+### 12i. CRITICAL — `fix-release.js` release-pipeline bug found and fixed (real incident, not hypothetical)
+**What happened for real:** running `npm run release` for v1.0.36, `fix-release.js`'s old logic — `files.find(f => f.includes('Setup') && f !== ymlName)` — matched and renamed a **stale, un-renamed v1.0.35 build** left over in `dist/` (from an earlier local `electron-builder --publish never` test build that was never run through `fix-release.js`) instead of the genuinely fresh v1.0.36 build, and **uploaded the wrong binary to GitHub under the v1.0.36 tag**. Caught because the freshly-built (correct) installer failed to install locally with a "parameter incorrect" error — investigating that led directly to this discovery. The bad v1.0.36 release and tag were manually deleted from GitHub before it could reach any real user's auto-updater.
+**Fix:** `fix-release.js` now requires `require('./package.json').version` and only matches files that contain that **exact current version string**, in addition to the previous checks. If no matching file is found, it **exits with an error and refuses to guess** (`process.exit(1)`), rather than silently picking something plausible-looking.
+**Lesson — process, not just code:** `dist/` accumulates every local build ever run and is never auto-cleaned; a local test build (`--publish never`) that skips `fix-release.js` leaves an un-renamed, ambiguous file sitting there indefinitely. **Recommend clearing `dist/*.exe`, `dist/*.blockmap`, `dist/*.yml` before any real release**, especially after doing local-only test builds. This bug could have shipped a stale/wrong binary under any past or future version tag if a stale file happened to sort first — treat this class of bug (loose pattern matching over multiple similarly-named candidates) as a recurring risk pattern in this codebase, same family as the Admin `handleBarcode` hoisting bug (§6.10) and the `diagnostics.js` IIFE truncation (§11) — **a later reference silently resolving to the wrong thing because more than one candidate exists.**
+
+**Files touched across 12a–12i:** `lottery-admin.html`, `lottery-manager.html`, `lottery-display.html`, `lottery-home.html`, `lottery-repository.html`, `main.js`, `fix-release.js`, `src/renderer/tlc-seed-data.json` (new).
+
+**Not yet done:** consolidating the ~7 originally-scattered TLC `fetch()` call sites into one shared function (the "fails on first try" reliability item) — deliberately deferred as the riskiest/most invasive piece, not yet started.
+
+---
+
+## 13. Future ideas — brainstormed, not started (read before assuming these exist)
 
 These are **design-only discussions**, not implemented, not scoped, no code written. Logged here purely so a future chat doesn't lose the context or accidentally re-derive the same reasoning from scratch. Do not treat anything in this section as "in progress" — nothing here has been started.
 
