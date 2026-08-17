@@ -27,7 +27,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveAutoBackup: (json) => ipcRenderer.send('save-auto-backup', json),
   openBackupFolder: () => ipcRenderer.send('open-backup-folder'),
   // App version (used by Diag.buildReport for the "Flag This" export).
-  // Plain synchronous value, not an invoke() — preload has Node access, and
-  // buildReport() is synchronous, so this avoids an unresolved-Promise bug.
-  appVersion: require('./package.json').version,
+  // NOTE: require('./package.json') does NOT work here — Electron's preload
+  // sandbox only allows a small whitelist of built-in modules, not arbitrary
+  // relative-path requires. That threw and silently killed this entire
+  // exposeInMainWorld() call, wiping out ALL of electronAPI. Use synchronous
+  // IPC to main.js instead, which has full Node access.
+  appVersion: ipcRenderer.sendSync('get-app-version-sync'),
 });

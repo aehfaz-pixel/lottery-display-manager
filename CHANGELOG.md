@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Added: Diagnostics "🚩 Flag This" button — exports a JSON report (recent event timeline, app version, tab, timestamp) with one click, no DevTools needed (see `PROJECT_STATUS.md` §11)
+- Added: Diagnostics scan-to-render performance timing — logs a `perf` entry with elapsed ms for each scan (see `PROJECT_STATUS.md` §11 for a caveat on reading these numbers with relayed/mobile scanners)
 - Fixed: Admin's `handleBarcode` recursion bug when the Bulk Scan/Add Inventory modal is closed (deferred since v1.0.34, see `PROJECT_STATUS.md` §6.10) — scanning on Admin/Inventory now works correctly whether or not the modal is open
 
 ## v1.0.34 — 2026-08-06

@@ -303,6 +303,12 @@ ipcMain.on('confirm-import-applied', () => {
 
 ipcMain.on('debug-log', (_e, msg) => debugLog(`[renderer] ${msg}`));
 
+// Synchronous version lookup for preload.js (require('./package.json') is
+// not available in the preload sandbox — see preload.js comment).
+ipcMain.on('get-app-version-sync', (event) => {
+  event.returnValue = app.getVersion();
+});
+
 // ── AUTO BACKUP ───────────────────────────────────────────
 const AUTO_BACKUP_DIR = path.join(app.getPath('userData'), 'auto-backups');
 const AUTO_BACKUP_RETENTION = 5; // keep the 5 most recent daily backups

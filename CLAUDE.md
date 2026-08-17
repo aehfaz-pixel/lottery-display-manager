@@ -22,7 +22,11 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 - `npm run dev` does NOT test the updater, window-focus routing, or auto-backup — always do a final pass on a real packaged install before calling a release verified.
 
 ## Recently fixed
-`lottery-admin.html`'s `handleBarcode` hoisting/recursion bug (two same-named functions causing infinite recursion when the Bulk Scan/Add Inventory modal was closed) was fixed by renaming the original implementation to `handleBarcodeCore` and having the wrapper call it directly by name. Committed `f30962d`, not yet released. Full write-up (now marked fixed) in PROJECT_STATUS.md §6.10.
+`lottery-admin.html`'s `handleBarcode` hoisting/recursion bug (two same-named functions causing infinite recursion when the Bulk Scan/Add Inventory modal was closed) was fixed by renaming the original implementation to `handleBarcodeCore` and having the wrapper call it directly by name. Full write-up in PROJECT_STATUS.md §6.10.
+
+Diagnostics phases 2d (Diagnostic Export / "Flag This") and 2e (scan-to-render perf timing) are now implemented and tested. Full write-up in PROJECT_STATUS.md §11. **Important lesson from this work:** `preload.js`'s `require()` is sandboxed to a whitelist (`electron`, Node built-ins) — a relative-path `require('./package.json')` threw and silently killed the entire `contextBridge.exposeInMainWorld({...})` call, breaking all of `window.electronAPI`. Treat any `preload.js` edit as high-risk; verify `window.electronAPI` is still a populated object in the DevTools console after any change there, not just `node --check`.
+
+Holding for release bundled with the handleBarcode fix above — not yet bumped into a numbered version as of this writing.
 
 ## File map (what to open for what)
 | Concern | File(s) |

@@ -563,6 +563,8 @@ Diag.deepDiff(before, after)                          // the underlying diff alg
 Diag.toggleInspect() / Diag.setInspectMode(bool)      // layout inspector on/off (global, cross-window)
 Diag.watchOverflow(cssSelector)                       // passive overflow watcher for given selector(s)
 Diag.readLog() / Diag.clear()                         // read or wipe the ring buffer
+Diag.buildReport() / Diag.exportReport()               // 2d: bundle + download a diagnostic report JSON
+Diag.markStart(label) / Diag.markEnd(label)            // 2e: performance.now()-based timing, logs a 'perf' entry
 ```
 Categories in use: `scan`, `route`, `state`, `ipc`, `error`, `info`, `layout`, `action`.
 
@@ -602,12 +604,22 @@ Filterable live viewer (polls + listens for `storage` events), shows diffs as re
 
 A 10th issue — the periodic `.slot-name-label` flicker — was investigated and root-caused (not "fixed," see §9) via this same session's `renderGrid()` tracing work.
 
-### Not yet built (future phases, no code exists for these)
-- **2d — Diagnostic Export + "Flag This":** bundling recent timeline + state + layout snapshot into one exportable file, plus a one-click capture button. Not started.
-- **2e — Performance Timing + Feature Watch Mode:** scan-to-render latency marks, and a filtered view scoped to one feature under test. Not started.
+### 2d & 2e — Diagnostic Export + Performance Timing — DONE (2026-08-17)
+**2d — Diagnostic Export / "Flag This":** `Diag.buildReport()` bundles version, tab, timestamp, inspect-mode state, and the recent event timeline into one object; `Diag.exportReport()` downloads it as `lottery-diag-report-<timestamp>.json` via a Blob/`<a download>`, no server or DevTools needed. Triggered by a new "🚩 Flag This" button in the shell's top bar, next to 🔍 Inspect.
+
+**2e — Performance Timing (scan-to-render only; Feature Watch Mode not yet built, see below):** `Diag.markStart(label)` / `Diag.markEnd(label)` use `performance.now()` to log a `perf`-category entry with elapsed ms. Wired around the scan path: `markStart('scan-to-render')` in `lottery-manager.html`'s `handleHookBarcode()`, `markEnd('scan-to-render')` at the end of `renderGrid()`. A `markEnd` with no matching `markStart` silently no-ops (e.g. a non-scan-triggered render like clicking a slot) — this is intentional, not a bug.
+
+**Caveat, confirmed in testing:** the perf mark measures wall-clock time until the *next* `renderGrid()` call, whatever triggers it — not pure processing time. A scan that doesn't match any slot's pack ID (or arrives while the app lacks OS focus, e.g. from a phone/Bluetooth-relayed scanner) can show an inflated number (one real test case: 3019.7ms) reflecting focus-regain/UI delay, not actual slowness. Normal matched scans consistently show single-digit ms. Don't treat an occasional large number here as a performance regression without checking the surrounding `route`/`state` log entries for context first.
+
+**Files touched:** `diagnostics.js` (`buildReport`, `exportReport`, `markStart`, `markEnd`, added to `window.Diag`), `lottery-app.html` (Flag This button + `flagThisTop()`), `lottery-manager.html` (mark calls in `handleHookBarcode`/`renderGrid`), `preload.js` (`appVersion`), `main.js` (`get-app-version-sync` IPC handler).
+
+**Regression caught and fixed during this work:** the first `appVersion` implementation used `require('./package.json')` directly in `preload.js`. Electron's preload sandbox only allows a small whitelist of built-in modules — arbitrary relative-path `require()` calls throw, and that throw silently killed the *entire* `contextBridge.exposeInMainWorld({...})` call, wiping out all of `window.electronAPI` (barcode routing, auto-update, backups — everything). Caught via manual testing (`window.electronAPI` was `undefined` in the console) before it went anywhere near a release. Fixed by using `ipcRenderer.sendSync('get-app-version-sync')` instead, with a matching `ipcMain.on` handler in `main.js` that has real Node/Electron access. **Lesson: preload.js's `require()` is sandboxed to a module whitelist (`electron`, Node built-ins) — never assume arbitrary relative-path requires work there, and treat any preload edit as high-risk, since a throw there can silently break the entire renderer↔main bridge with no error surfaced anywhere except the DevTools console.**
+
+**Not yet built:**
+- **Feature Watch Mode** (the other half of 2e) — a text-filter input in `lottery-diagnostics.html` to narrow the live timeline to entries matching a substring (e.g. "renderGrid"). Purely a `lottery-diagnostics.html` UI addition, no `diagnostics.js` dependency. Not started.
 
 ### A structural lesson learned while BUILDING this system (worth remembering for future edits to `diagnostics.js`)
-`diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to). **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**
+`diagnostics.js` is one large IIFE (`(function(){ ... })()`). While adding the 2b/2c code mid-session, a `str_replace` edit accidentally closed the IIFE early, orphaning the error-capture code and the `window.Diag` assignment after it — caught immediately via `node --check`, not by manual review. This is the *exact same class of bug* as Change 1 (duplicate/misplaced declarations silently changing what a later reference actually points to) and the preload `require()` regression above. **Lesson: after ANY edit to a large single-scope file like this one, run `node --check` (or equivalent) immediately, before making further edits or assuming success — don't wait until "done" to validate syntax.**
 
 ---
 
