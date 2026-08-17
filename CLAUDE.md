@@ -26,7 +26,7 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 ## Recently fixed (v1.0.35–v1.0.37)
 - `lottery-admin.html`'s `handleBarcode` hoisting/recursion bug — fixed in v1.0.35. Full write-up in PROJECT_STATUS.md §6.10.
 - A large TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, and a critical `fix-release.js` release-pipeline bug (which shipped a stale build under a wrong version tag in a real incident — caught and cleaned up before it reached any real user) — all in v1.0.37. Full write-up in PROJECT_STATUS.md §12 (12a–12i). If working on Admin, Inventory, Manager, Display, Home, or the release pipeline, read §12 first.
-- **Open follow-up, not yet root-caused:** a report of one backup import "faltering" then a retry working quickly, after the §12h messaging/logging fix shipped. Check the debug log for that specific incident if it recurs — see §12h's last paragraph.
+- Backup import restart mechanism confirmed fully working on the real installed v1.0.37 app (§12h) — an earlier "faltered" report was traced to an older, since-superseded install.
 
 ## File map (what to open for what)
 | Concern | File(s) |
