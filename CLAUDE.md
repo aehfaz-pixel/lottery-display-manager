@@ -31,6 +31,16 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 ## Recently added (v1.0.38)
 - **Preview Scan Mode** (§13): a toggleable second scan mode in Manager — batch scans into a review-before-save summary instead of applying instantly. Involved a non-obvious two-part "bring to foreground" fix (shell tab-switch vs. true OS-level focus, via a `setAlwaysOnTop` toggle to bypass Windows' foreground-lock) and a routing override in `lottery-app.html`'s `routeBarcode()` so scans reach Manager even when Admin/Inventory is the active tab. Read §13 in full before touching Manager's scan pipeline, `routeBarcode()`, or the bring-to-front chain in `main.js`.
 
+## Reporting Standards (PDF/Excel) — read before touching any report generator
+Applies to every report this app generates (Inventory Log, Day End Sales Report, Live Slots, and any future report type):
+- **Header cells must match their column's data alignment.** jsPDF-autotable's `columnStyles.halign` does NOT reliably cascade to header cells — force alignment explicitly via a `didParseCell` hook applied to every cell (head + body alike). See `lottery-repository.html`'s `buildPdf()`.
+- Alignment default (deviate only on explicit instruction): text left, numbers right, dates/percentages/short codes centered. Leftmost identifying column (e.g. a name) stays left-aligned unless told otherwise.
+- Every report: title, one-line subtitle (date range/filters), bold/colored header row, alternating row shading, page numbers on multi-page PDFs, minimal-but-present borders, column widths sized to content.
+- **Printed/exported backgrounds:** browsers strip background colors on print/save-as-PDF unless `print-color-adjust: exact` (+ `-webkit-` prefix) is set, both as a base rule and inside `@media print`. Required on anything printed directly (e.g. Live Slots).
+- Don't sync shading colors between a live view and a print window via string-replacing inline `rgba(...)` — browsers reserialize inline styles (spacing, leading zeros) and silently break exact-string matches. Use a shared CSS class instead, defined independently in each context.
+- **Default filenames for native print/Save-as-PDF:** the OS/browser dialog's suggested filename comes from `<title>`. Don't set it via `document.write` into a blank popup + delayed `document.title=` — unreliable, especially in Electron. Instead build the full HTML (title included) as a string, wrap in a `Blob`, and `window.open()` the Blob URL directly (real navigation, title parsed normally); trigger `window.print()` from an inline script embedded in that document's own `onload`.
+- **Excel limitation:** reports use the free/community SheetJS build (`xlsx.full.min.js` via CDN) — no cell styling support (alignment/fill/bold). Only PDF output gets the alignment/shading treatment above. If Excel styling is ever required, it needs a different library (e.g. ExcelJS) — flag to the user rather than silently skipping it.
+
 ## File map (what to open for what)
 | Concern | File(s) |
 |---|---|

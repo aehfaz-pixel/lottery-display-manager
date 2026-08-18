@@ -1812,7 +1812,7 @@ function bumpTicket(d){
     slot.finishedAt=null;
     toast(`Slot #${selectedSlot} reactivated — ${total-slot.currentTicket+1} tickets remaining`,'ok');
   }
-  if(slot.currentTicket>prev) logSale(slot,prev,slot.currentTicket);
+  if(slot.currentTicket!==prev) logSale(slot,prev,slot.currentTicket);
   checkPackFinished(slot);
   saveSlots(); renderGrid(); renderSidebar();
 }
@@ -1838,7 +1838,7 @@ function setTicket(val){
     slot.finishedAt=null;
     toast(`Slot #${selectedSlot} reactivated — ${total-n+1} tickets remaining`,'ok');
   }
-  if(n>prev) logSale(slot,prev,n);
+  if(n!==prev) logSale(slot,prev,n);
   checkPackFinished(slot);
   saveSlots(); renderGrid(); renderSidebar();
 }
@@ -2435,7 +2435,7 @@ function logNewPack(slot,prevPackId,prevTicket){
 }
 
 function logSale(slot,prevCount,newCount){
-  if(newCount<=prevCount) return;
+  if(newCount===prevCount) return;
   logEntry('sale',slot,{ticketsSold:newCount-prevCount,ticketNumber:newCount});
 }
 

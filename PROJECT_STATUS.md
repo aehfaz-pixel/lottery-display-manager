@@ -31,8 +31,8 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.37
-- **Status:** ✅ Fully working — everything from v1.0.34 still confirmed functional, PLUS a major TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, and a critical release-pipeline bug fix (see §12 for full write-up) — all verified end-to-end on dev and real packaged/installed builds, including a live auto-update test from v1.0.35 → v1.0.37.
+- **Version:** v1.0.38
+- **Status:** ✅ Fully working — everything from v1.0.34 still confirmed functional, PLUS a major TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, a critical release-pipeline bug fix (§12), and Preview Scan Mode (§13) — all verified end-to-end on dev and real packaged/installed builds, including a live auto-update test from v1.0.35 → v1.0.37 and a clean v1.0.38 release.
 - **Git:** Repo tracked, pushed to `origin/main`. Run `git log -1` to confirm the current commit hash — this file isn't auto-updated with it.
 - **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version.
 - **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data — verified with 86 real slots on 2 separate fresh devices, and again during the v1.0.29→v1.0.30 device migration.
@@ -255,7 +255,7 @@ A phone camera scanning app (or the real scanner reading the printed/displayed c
 
 ## 6.10. FIXED — Admin `handleBarcode` infinite recursion when Bulk Scan/Add Inventory modal is closed (found 2026-08-06, fixed 2026-08-16)
 
-**Status: fixed, committed (`f30962d`), not yet included in a numbered release.**
+**Status: fixed, committed (`f30962d`), released in v1.0.35.**
 
 ### The fix applied
 Renamed the line-652 implementation to `handleBarcodeCore`, and updated the Bulk Scan wrapper (formerly ~line 1673) to call `handleBarcodeCore(code)` directly by name instead of via `_origHandleBarcode` (which the hoisting bug below had silently pointed at itself). The now-dead `const _origHandleBarcode=handleBarcode` line and the stale "KNOWN BUG" comment/log were removed. No caller changes were needed — both external callers (`lottery-admin.html`'s local keydown listener, and `lottery-app.html`'s `adm.handleBarcode(...)` shell routing) still resolve to the wrapper, which is the only function still named `handleBarcode`. Verified with `node --check` on the extracted script block, and manually verified in `npm run dev` for both the modal-open and modal-closed scan paths.

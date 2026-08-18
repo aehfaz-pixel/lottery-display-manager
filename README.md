@@ -51,7 +51,7 @@ This app is designed around **two physical scanners with different jobs**:
 
 **Bluetooth scanners (e.g. a phone acting as a scanner):** occasional dropped/missed scans are a known symptom of Bluetooth latency, not a bug — the app requires keystrokes to arrive in a tight burst (under 50ms apart) to be recognized as a scan at all, and a Bluetooth hiccup mid-scan will make it get silently ignored. If this happens often, check the connection or consider a wired scanner.
 
-## Preview Scan Mode (added, unreleased)
+## Preview Scan Mode (added v1.0.38)
 
 A second scan mode in Manager, toggled with the "🔍 Preview Scan" button in the header. Off by default.
 

@@ -108,346 +108,443 @@ h1{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
       </div>
       <button class="modal-close" onclick="closeModal()">✕ Close</button>
     </div>
-    <div id="modalTabs" style="display:none;border-bottom:1px solid var(--border);margin-bottom:12px;display:flex;gap:0;flex-shrink:0">
-      <button id="modalTab-files" onclick="switchModalTab('files')" style="padding:8px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid var(--primary);color:var(--primary)">All Files</button>
-      <button id="modalTab-delivery" onclick="switchModalTab('delivery')" style="padding:8px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">📦 Delivery</button>
-    </div>
     <div class="file-list" id="fileList"></div>
   </div>
 </div>
 
 <script>
-const REPO_KEY='lotteryApp_repository';
+const REPO_KEY='lotteryApp_repository'; // legacy key, unused by new reports below
+const DAYEND_KEY='lotteryApp_dayend_reports';
 const TYPES=[
-  {id:'sales_log',    label:'Sales Log',        icon:'📋', color:'#1f6feb'},
-  {id:'nightly',      label:'Nightly Report',   icon:'🌙', color:'#7c3aed'},
-  {id:'slot_barcodes',label:'Slot Barcodes',    icon:'📷', color:'#059669', live:true},
-  {id:'inventory_csv',label:'Inventory CSV',    icon:'📦', color:'#d97706'},
-  {id:'inventory_pdf',label:'Inventory PDF',    icon:'📄', color:'#dc2626'},
-  {id:'db_export',    label:'DB Export',        icon:'💾', color:'#0891b2'},
-  {id:'winners',      label:'Winners',          icon:'🏆', color:'#b45309'},
+  {id:'inventory_log',label:'Inventory Log',        icon:'📋', color:'#1f6feb'},
+  {id:'day_end',       label:'Day End Sales Report', icon:'🌙', color:'#7c3aed'},
+  {id:'live_slots',    label:'Live Slots',           icon:'📡', color:'#059669', live:true},
 ];
 
 function loadRepo(){try{return JSON.parse(localStorage.getItem(REPO_KEY)||'{}')}catch{return{}}}
-function saveRepo(r){try{localStorage.setItem(REPO_KEY,JSON.stringify(r))}catch(e){alert('Storage full')}}
-
 function escH(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function parsePrice(p){return parseFloat(String(p||'').replace(/[^0-9.]/g,''))||0}
+function fmtMoney(n){return '$'+(n||0).toFixed(2)}
+function fmtDate(ts){return ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
 function render(){
-  const repo=loadRepo();
   const grid=document.getElementById('repoGrid');
   grid.innerHTML=TYPES.map(t=>{
-    const count=t.live?'Live':((repo[t.id]||[]).length?((repo[t.id]||[]).length)+' file'+(repo[t.id].length>1?'s':''):'No files yet');
-    const hasContent=t.live||((repo[t.id]||[]).length>0);
-    return `<button class="repo-btn${hasContent?' has-files':''}" style="${hasContent?'--accent:'+t.color+';border-color:'+t.color:'--accent:var(--border)'}" onclick="openModal('${t.id}')">
+    const label=t.live?'Live':'';
+    return `<button class="repo-btn${t.live?' has-files':''}" style="${t.live?'--accent:'+t.color+';border-color:'+t.color:'--accent:var(--border)'}" onclick="openModal('${t.id}')">
       <span class="icon">${t.icon}</span>
       <span class="label">${t.label}</span>
-      <span class="count" style="color:${hasContent?t.color:'var(--dim)'}">${count}</span>
+      <span class="count" style="color:${t.live?t.color:'var(--dim)'}">${label}</span>
     </button>`;
   }).join('');
 }
 
-let _currentType=null;
-const DELIVERY_TYPES=['inventory_csv','inventory_pdf'];
-
-function switchModalTab(tab){
-  document.getElementById('modalTab-files').style.borderBottomColor=tab==='files'?'var(--primary)':'transparent';
-  document.getElementById('modalTab-files').style.color=tab==='files'?'var(--primary)':'var(--muted)';
-  document.getElementById('modalTab-delivery').style.borderBottomColor=tab==='delivery'?'var(--primary)':'transparent';
-  document.getElementById('modalTab-delivery').style.color=tab==='delivery'?'var(--primary)':'var(--muted)';
-  if(tab==='delivery') renderDeliveryTab();
-  else{
-    const t=TYPES.find(x=>x.id===_currentType);
-    const repo=loadRepo();
-    renderFileList(repo[_currentType]||[],t);
-  }
-}
-
-function renderDeliveryTab(){
-  const list=document.getElementById('fileList');
-  try{
-    const inv=JSON.parse(localStorage.getItem('lotteryApp_inventory')||'[]');
-    if(!inv.length){list.innerHTML='<div class="empty">No inventory records found</div>';return;}
-
-    // Group by load date
-    const byDate={};
-    inv.forEach(item=>{
-      if(!item.loadedAt) return;
-      const date=new Date(item.loadedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      if(!byDate[date]) byDate[date]=[];
-      byDate[date].push(item);
-    });
-
-    // Sort dates newest first
-    const sorted=Object.entries(byDate).sort((a,b)=>new Date(b[0])-new Date(a[0]));
-
-    if(!sorted.length){list.innerHTML='<div class="empty">No delivery dates found</div>';return;}
-
-    list.innerHTML=sorted.map(([date,items])=>`
-      <div class="file-item" style="flex-direction:column;align-items:stretch;gap:6px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">📦 ${date}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">${items.length} pack${items.length>1?'s':''} loaded</div>
-          </div>
-          <button class="btn-dl" onclick="downloadDelivery('${date}')">⬇ Download</button>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">
-          ${[...new Set(items.map(i=>i.name||i.lotteryId))].map(n=>`<span style="font-size:10px;padding:2px 8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--muted)">${escH(n)}</span>`).join('')}
-        </div>
-      </div>`).join('');
-  }catch(e){list.innerHTML='<div class="empty">Error loading inventory</div>';}
-}
-
-function downloadDelivery(date){
-  try{
-    const inv=JSON.parse(localStorage.getItem('lotteryApp_inventory')||'[]');
-    const mgrSlots=JSON.parse(localStorage.getItem('lotteryApp_slots')||'{"slots":[]}').slots||[];
-    const items=inv.filter(item=>{
-      if(!item.loadedAt) return false;
-      return new Date(item.loadedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})===date;
-    });
-    if(!items.length) return;
-    const fmtDate=ts=>ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
-    const headers=['Lottery Name','Pack Barcode','Lottery ID','Price','Total Tickets','Loaded','Activated','Current Ticket','Settled','Sold Out'];
-    const rows=items.map(item=>{
-      const compositeId=(item.lotteryId||'')+(item.packId||item.packBarcode?.slice(4,11)||'');
-      const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
-      return [
-        item.name||'',item.packBarcode||'',item.lotteryId||'',item.price||'',item.totalTickets||'',
-        fmtDate(item.loadedAt),fmtDate(slot?.activatedAt),
-        slot?.activatedAt?(slot.isFinished?'Sold Out':String(slot.currentTicket||1)):'',
-        fmtDate(slot?.settledAt),fmtDate(slot?.finishedAt)
-      ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',');
-    });
-    const csv=[headers.join(','),...rows].join('\n');
-    const fname='delivery-'+date.replace(/[, ]+/g,'-')+'.csv';
-    const blob=new Blob([csv],{type:'text/csv'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();
-  }catch(e){alert('Download failed: '+e.message);}
-}
+let _liveRefreshTimer=null;
 
 function openModal(typeId){
-  _currentType=typeId;
-  const t=TYPES.find(x=>x.id===typeId);
-  if(t.live){ openLiveModal(t); return; }
-  const repo=loadRepo();
-  const files=repo[typeId]||[];
-  document.getElementById('modalTitle').textContent=t.icon+' '+t.label;
-  document.getElementById('modalSub').textContent=files.length?files.length+' saved file'+(files.length>1?'s':''):'No files saved yet';
-  const tabs=document.getElementById('modalTabs');
-  tabs.style.display=DELIVERY_TYPES.includes(typeId)?'flex':'none';
-  if(DELIVERY_TYPES.includes(typeId)) switchModalTab('files');
-  else renderFileList(files,t);
-  document.getElementById('fileModal').classList.add('active');
-}
-
-function openLiveModal(t){
-  // Slot Barcodes — live list from localStorage
-  document.getElementById('modalTitle').textContent=t.icon+' '+t.label+' — Live';
-  try{
-    const slotsRaw=localStorage.getItem('lotteryApp_slots');
-    const dbRaw=localStorage.getItem('lotteryApp_db');
-    if(!slotsRaw){document.getElementById('modalSub').textContent='No slot data';document.getElementById('fileList').innerHTML='<div class="empty">No slots configured</div>';document.getElementById('fileModal').classList.add('active');return;}
-    const slotsData=JSON.parse(slotsRaw);
-    const db=dbRaw?JSON.parse(dbRaw):{lotteries:[]};
-    const slots=(slotsData.slots||[]).slice().sort((a,b)=>a.slotNumber-b.slotNumber);
-    const rows=slots.filter(s=>s.lotteryId&&s.packId).map(slot=>{
-      const lot=(db.lotteries||[]).find(l=>l.lotteryId===slot.lotteryId);
-      const barcode=slot.lotteryId+slot.packId+String(slot.currentTicket||1).padStart(3,'0');
-      return {slot:slot.slotNumber,name:lot?.name||slot.lotteryId,barcode,status:slot.isFinished?'Sold Out':'Active'};
-    });
-    document.getElementById('modalSub').textContent=rows.length+' barcodes · click to select all';
-    const list=document.getElementById('fileList');
-    if(!rows.length){list.innerHTML='<div class="empty">No configured slots with barcodes</div>';}
-    else{
-      const text=rows.map(r=>r.barcode).join('\n');
-      list.innerHTML=`
-        <div style="margin-bottom:8px;display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn-dl" onclick="navigator.clipboard.writeText(document.getElementById('barcodeText').value)">📋 Copy All</button>
-          <button class="btn-dl" onclick="downloadBarcodes()">⬇ Download</button>
-        </div>
-        <textarea id="barcodeText" onclick="this.select()" readonly style="width:100%;height:400px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;font-size:13px;letter-spacing:2px;line-height:2;padding:12px;resize:none;outline:none">${text}</textarea>`
-    }
-  }catch(e){document.getElementById('fileList').innerHTML='<div class="empty">Error loading slot data</div>';}
-  document.getElementById('fileModal').classList.add('active');
-}
-
-function downloadBarcodes(){
-  try{
-    const slotsRaw=localStorage.getItem('lotteryApp_slots');
-    const dbRaw=localStorage.getItem('lotteryApp_db');
-    if(!slotsRaw) return;
-    const slotsData=JSON.parse(slotsRaw);
-    const db=dbRaw?JSON.parse(dbRaw):{lotteries:[]};
-    const slots=(slotsData.slots||[]).slice().sort((a,b)=>a.slotNumber-b.slotNumber);
-    const cols=['Slot #','Lottery Name','Barcode','Status'];
-    const rows=slots.filter(s=>s.lotteryId&&s.packId).map(slot=>{
-      const lot=(db.lotteries||[]).find(l=>l.lotteryId===slot.lotteryId);
-      return [slot.slotNumber,lot?.name||slot.lotteryId,slot.lotteryId+slot.packId+String(slot.currentTicket||1).padStart(3,'0'),slot.isFinished?'Sold Out':'Active'];
-    });
-    const csv=[cols,...rows].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
-    const fname='slot-barcodes-'+new Date().toISOString().slice(0,10)+'.csv';
-    const blob=new Blob([csv],{type:'text/csv'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();
-  }catch(e){alert('Export failed: '+e.message);}
-}
-
-function renderFileList(files,t){
-  const list=document.getElementById('fileList');
-  if(!files.length){
-    list.innerHTML=`<div class="empty">${t.icon}<br>No ${t.label} files yet.<br><span style="font-size:11px">Files save automatically when you export reports.</span></div>`;
-    return;
-  }
-  list.innerHTML=files.map(f=>{
-    const date=new Date(f.savedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
-    const size=Math.round((f.content||'').length/1024);
-    return `<div class="file-item">
-      <span class="file-icon">${t.icon}</span>
-      <div class="file-info">
-        <div class="file-name">${escH(f.filename)}</div>
-        <div class="file-meta">${date} · ${size} KB</div>
-      </div>
-      <button class="btn-dl" onclick="dlFile('${f.id}')">⬇ Download</button>
-      <button class="btn-del" onclick="delFile('${f.id}')" title="Delete">✕</button>
-    </div>`;
-  }).join('');
+  if(_liveRefreshTimer){clearInterval(_liveRefreshTimer);_liveRefreshTimer=null;}
+  if(typeId==='inventory_log') openInventoryLogModal();
+  else if(typeId==='day_end') openDayEndModal();
+  else if(typeId==='live_slots') openLiveSlotsModal();
 }
 
 function closeModal(){
+  if(_liveRefreshTimer){clearInterval(_liveRefreshTimer);_liveRefreshTimer=null;}
   document.getElementById('fileModal').classList.remove('active');
   render();
 }
 
-function dlFile(fileId){
-  const repo=loadRepo();
-  for(const typeId in repo){
-    const f=repo[typeId].find(x=>x.id===fileId);
-    if(f){
-      const blob=new Blob([f.content],{type:f.mimeType||'text/plain'});
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);
-      a.download=f.filename;
-      a.click();
-      return;
-    }
-  }
-}
-
-function delFile(fileId){
-  const repo=loadRepo();
-  for(const typeId in repo){
-    const idx=repo[typeId].findIndex(x=>x.id===fileId);
-    if(idx>-1){
-      repo[typeId].splice(idx,1);
-      saveRepo(repo);
-      const t=TYPES.find(x=>x.id===typeId);
-      const files=repo[typeId]||[];
-      document.getElementById('modalSub').textContent=files.length?files.length+' saved file'+(files.length>1?'s':''):'No files saved yet';
-      renderFileList(files,t);
-      return;
-    }
-  }
-}
-
-// Re-render when localStorage changes (reports saved from other tabs)
-window.addEventListener('storage',e=>{if(e.key===REPO_KEY) render();});
-
-// ── AUTO POPULATE ─────────────────────────────────────────
-// Pull existing data from localStorage into repository on load
-function autoPopulateRepo(){
-  const repo=loadRepo();
-  let changed=false;
-
-  // Helper: add if not already present (match by filename)
-  function addIfNew(typeId, filename, content, mimeType, savedAt){
-    if(!repo[typeId]) repo[typeId]=[];
-    if(repo[typeId].find(f=>f.filename===filename)) return; // already exists
-    repo[typeId].unshift({id:'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),filename,content,mimeType,savedAt:savedAt||Date.now()});
-    if(repo[typeId].length>20) repo[typeId]=repo[typeId].slice(0,20);
-    changed=true;
-  }
-
-  // 1. Nightly Reports
-  try{
-    const nights=JSON.parse(localStorage.getItem('lotteryApp_nightly_reports')||'[]');
-    nights.forEach(r=>{
-      const cols=['Slot','Status','Lottery Name','Lottery ID','Pack Barcode','Pack ID','Price','Current Ticket','Total Tickets','Finished'];
-      const rows=(r.rows||[]).map(row=>[row.slot,row.status,row.name,row.id,row.packBarcode,row.uniquePackId,row.price,row.currentTicket,row.total,row.isFinished]);
-      const csv=[cols,...rows].map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
-      const fname='lottery-report-'+(r.date||'').replace(/\//g,'-')+'.csv';
-      addIfNew('nightly',fname,csv,'text/csv',r.generatedAt);
-    });
-  }catch(e){console.warn('repo: nightly import failed',e);}
-
-  // 2. Sales Log — generate one snapshot CSV
-  try{
-    const log=JSON.parse(localStorage.getItem('lotteryApp_sales_log')||'[]');
-    if(log.length){
-      const fmtTs=ts=>ts?new Date(ts).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
-      const cols=['Date/Time','Type','Slot','Lottery Name','Lottery ID','Pack Barcode','Pack ID','Tickets Sold','Next Ticket','Price'];
-      const rows=log.map(e=>[fmtTs(e.timestamp),e.type==='new_pack'?'New Pack':'Sale',`#${e.slotNumber}`,e.lotteryName||'',e.lotteryId||'',e.packBarcode||'',e.uniquePackId||'',e.ticketsSold??'',e.ticketNumber??'',e.price||'']);
-      const csv=[cols,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-      const fname='lottery-sales-log-snapshot-'+new Date().toISOString().slice(0,10)+'.csv';
-      addIfNew('sales_log',fname,csv,'text/csv');
-    }
-  }catch(e){console.warn('repo: sales log import failed',e);}
-
-  // 3. Winners
-  try{
-    const winners=JSON.parse(localStorage.getItem('lotteryApp_winners')||'[]');
-    if(winners.length){
-      const fmtTs=ts=>ts?new Date(ts).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
-      const cols=['Date/Time','Pack Barcode','Amount'];
-      const rows=winners.map(e=>[fmtTs(e.timestamp),e.barcode,'$'+parseFloat(e.amount||0).toFixed(2)]);
-      const csv=[cols,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-      const fname='winners-snapshot-'+new Date().toISOString().slice(0,10)+'.csv';
-      addIfNew('winners',fname,csv,'text/csv');
-    }
-  }catch(e){console.warn('repo: winners import failed',e);}
-
-  // 4. DB Export snapshot
-  try{
-    const db=localStorage.getItem('lotteryApp_db');
-    if(db){
-      const fname='lottery-db-snapshot-'+new Date().toISOString().slice(0,10)+'.json';
-      addIfNew('db_export',fname,db,'application/json');
-    }
-  }catch(e){console.warn('repo: db export import failed',e);}
-
-  // 5. . Inventory CSV snapshot — always update today's
-  try{
-    const inv=JSON.parse(localStorage.getItem('lotteryApp_inventory')||'[]');
-    if(inv.length){
-      const fmtDate=ts=>ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
-      const headers=['Lottery Name','Pack Barcode','Lottery ID','Price','Total Tickets','Loaded'];
-      const rows=inv.map(item=>[item.name||'',item.packBarcode||'',item.lotteryId||'',item.price||'',item.totalTickets||'',fmtDate(item.loadedAt)].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
-      const csv=[headers.join(','),...rows].join('\n');
-      const fname='inventory-snapshot-'+new Date().toISOString().slice(0,10)+'.csv';
-      if(!repo['inventory_csv']) repo['inventory_csv']=[];
-      const todayIdx=repo['inventory_csv'].findIndex(f=>f.filename===fname);
-      const entry={id:'r_'+Date.now(),filename:fname,content:csv,mimeType:'text/csv',savedAt:Date.now()};
-      if(todayIdx>-1) repo['inventory_csv'][todayIdx]=entry;
-      else repo['inventory_csv'].unshift(entry);
-      if(repo['inventory_csv'].length>20) repo['inventory_csv']=repo['inventory_csv'].slice(0,20);
-      changed=true;
-    }
-  }catch(e){console.warn('repo: inventory import failed',e);}
-
-  if(changed){ saveRepo(repo); }
-}
-
-function refreshAll(){
-  // Clear today's auto-snapshots so they get regenerated fresh
-  const repo=loadRepo();
-  const today=new Date().toISOString().slice(0,10);
-  ['slot_snapshot','inventory_csv','db_export','sales_log','winners'].forEach(typeId=>{
-    if(repo[typeId]) repo[typeId]=repo[typeId].filter(f=>!f.filename.includes('snapshot-'+today)&&!f.filename.includes(today)||f.filename.includes('report'));
+// ── SHARED: dynamic library loading (jsPDF + autotable, SheetJS) ──
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector('script[src="'+src+'"]')){res();return;}
+    const s=document.createElement('script');
+    s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Failed to load '+src));
+    document.head.appendChild(s);
   });
-  saveRepo(repo);
-  autoPopulateRepo();
-  render();
 }
+async function ensurePdfLibs(){
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+}
+async function ensureXlsxLib(){
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+}
+async function buildPdf(title,subtitle,head,rows,filename,download,columnStyles){
+  await ensurePdfLibs();
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'pt'});
+  doc.setFontSize(14);doc.text(title,40,32);
+  if(subtitle){doc.setFontSize(9);doc.setTextColor(110);doc.text(subtitle,40,48);doc.setTextColor(0);}
+  doc.autoTable({
+    head:[head],body:rows,startY:58,styles:{fontSize:8,cellPadding:4,overflow:'linebreak'},
+    headStyles:{fillColor:[31,111,235],textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[245,247,250]},
+    columnStyles:columnStyles||{},
+    // columnStyles' halign doesn't reliably cascade to header cells across autotable versions —
+    // force it explicitly on every cell (head + body) so header and data alignment always match.
+    didParseCell:d=>{
+      const cs=(columnStyles||{})[d.column.index];
+      if(cs&&cs.halign) d.cell.styles.halign=cs.halign;
+    },
+    margin:{left:40,right:40},
+    didDrawPage:d=>{
+      doc.setFontSize(8);doc.setTextColor(150);
+      doc.text('Page '+doc.internal.getNumberOfPages(),d.settings.margin.left,doc.internal.pageSize.getHeight()-15);
+    }
+  });
+  if(download) doc.save(filename);
+  return doc.output('datauristring');
+}
+async function buildXlsx(sheetName,head,rows,filename,download){
+  await ensureXlsxLib();
+  const ws=XLSX.utils.aoa_to_sheet([head,...rows]);
+  ws['!cols']=head.map(h=>({wch:Math.max(12,String(h).length+4)}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,sheetName);
+  if(download) XLSX.writeFile(wb,filename);
+  return 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+XLSX.write(wb,{type:'base64',bookType:'xlsx'});
+}
+
+// ══════════════════════════════════════════════════════════
+// 1. INVENTORY LOG
+// ══════════════════════════════════════════════════════════
+function openInventoryLogModal(){
+  document.getElementById('modalTitle').textContent='📋 Inventory Log';
+  document.getElementById('modalSub').textContent='Filter inventory by date and export';
+  const today=new Date();
+  const list=document.getElementById('fileList');
+  list.innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">FILTER BY</div>
+        <div style="display:flex;gap:8px">
+          <button id="ilDateType_loadedAt" class="il-toggle active" onclick="ilSetDateType('loadedAt')" style="flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Loaded Date</button>
+          <button id="ilDateType_activatedAt" class="il-toggle" onclick="ilSetDateType('activatedAt')" style="flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">Activated Date</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">DATE RANGE</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="ilStart" value="${ymd(today)}" style="flex:1;padding:7px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text)">
+          <span style="color:var(--muted);font-size:12px">to</span>
+          <input type="date" id="ilEnd" value="${ymd(today)}" style="flex:1;padding:7px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text)">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button onclick="ilPreset('thisMonth')" class="btn-dl" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">This Month</button>
+          <button onclick="ilPreset('lastMonth')" class="btn-dl" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Last Month</button>
+          <button onclick="ilPreset('last30')" class="btn-dl" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Last 30 Days</button>
+          <button onclick="ilPreset('thisYear')" class="btn-dl" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">This Year</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">OUTPUT FORMAT</div>
+        <div style="display:flex;gap:8px">
+          <button id="ilFmt_pdf" class="il-toggle active" onclick="ilSetFormat('pdf')" style="flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>
+          <button id="ilFmt_excel" class="il-toggle" onclick="ilSetFormat('excel')" style="flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">📊 Excel</button>
+        </div>
+      </div>
+      <button onclick="generateInventoryLog()" style="padding:11px;border-radius:8px;border:none;background:var(--success);color:#fff;font-size:13px;font-weight:700;cursor:pointer">⬇ Generate & Download</button>
+      <div id="ilStatus" style="font-size:11px;color:var(--muted);text-align:center"></div>
+    </div>`;
+  document.getElementById('fileModal').classList.add('active');
+}
+let _ilDateType='loadedAt', _ilFormat='pdf';
+function ilSetDateType(v){
+  _ilDateType=v;
+  ['loadedAt','activatedAt'].forEach(k=>{
+    const el=document.getElementById('ilDateType_'+k);
+    const on=k===v;
+    el.style.background=on?'var(--primary)':'var(--surface2)';
+    el.style.borderColor=on?'var(--primary)':'var(--border)';
+    el.style.color=on?'#fff':'var(--text)';
+  });
+}
+function ilSetFormat(v){
+  _ilFormat=v;
+  ['pdf','excel'].forEach(k=>{
+    const el=document.getElementById('ilFmt_'+k);
+    const on=k===v;
+    el.style.background=on?'var(--primary)':'var(--surface2)';
+    el.style.borderColor=on?'var(--primary)':'var(--border)';
+    el.style.color=on?'#fff':'var(--text)';
+  });
+}
+function ilPreset(p){
+  const now=new Date();let s,e;
+  if(p==='thisMonth'){s=new Date(now.getFullYear(),now.getMonth(),1);e=now;}
+  else if(p==='lastMonth'){s=new Date(now.getFullYear(),now.getMonth()-1,1);e=new Date(now.getFullYear(),now.getMonth(),0);}
+  else if(p==='last30'){e=now;s=new Date(now);s.setDate(s.getDate()-30);}
+  else if(p==='thisYear'){s=new Date(now.getFullYear(),0,1);e=now;}
+  document.getElementById('ilStart').value=ymd(s);
+  document.getElementById('ilEnd').value=ymd(e);
+}
+async function generateInventoryLog(){
+  const statusEl=document.getElementById('ilStatus');
+  try{
+    const startVal=document.getElementById('ilStart').value;
+    const endVal=document.getElementById('ilEnd').value;
+    if(!startVal||!endVal){statusEl.textContent='Select a valid date range';return;}
+    const startTs=new Date(startVal+'T00:00:00').getTime();
+    const endTs=new Date(endVal+'T23:59:59.999').getTime();
+    const inv=JSON.parse(localStorage.getItem('lotteryApp_inventory')||'[]');
+    const mgrSlots=JSON.parse(localStorage.getItem('lotteryApp_slots')||'{"slots":[]}').slots||[];
+    const items=inv.filter(item=>{
+      const ts=item[_ilDateType];
+      if(!ts) return false;
+      return ts>=startTs && ts<=endTs;
+    }).sort((a,b)=>(b[_ilDateType]||0)-(a[_ilDateType]||0));
+    if(!items.length){statusEl.textContent='No inventory items match that date range';return;}
+    statusEl.textContent='Generating…';
+    const head=['Lottery Name','Pack Barcode','Lottery ID','Price','Total Tickets','Loaded','Activated','Current Ticket','Settled','Sold Out'];
+    const rows=items.map(item=>{
+      const compositeId=(item.lotteryId||'')+(item.packId||(item.packBarcode||'').slice(4,11));
+      const slot=mgrSlots.find(s=>s.uniquePackId===compositeId);
+      return [
+        item.name||'',item.packBarcode||'',item.lotteryId||'',item.price||'',item.totalTickets||'',
+        fmtDate(item.loadedAt),fmtDate(slot?.activatedAt),
+        slot?.activatedAt?(slot.isFinished?'Sold Out':String(slot.currentTicket||1)):'—',
+        fmtDate(slot?.settledAt),fmtDate(slot?.finishedAt)
+      ];
+    });
+    const fname='Inventory_Log_'+startVal+'_to_'+endVal;
+    const subtitle=(_ilDateType==='loadedAt'?'Loaded Date':'Activated Date')+' · '+startVal+' to '+endVal;
+    if(_ilFormat==='pdf'){
+      const cs={1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},5:{halign:'center'},6:{halign:'center'},7:{halign:'center'},8:{halign:'center'},9:{halign:'center'}};
+      await buildPdf('Inventory Log',subtitle,head,rows,fname+'.pdf',true,cs);
+    }
+    else await buildXlsx('Inventory Log',head,rows,fname+'.xlsx',true);
+    statusEl.textContent='✓ Downloaded '+rows.length+' rows';
+  }catch(e){statusEl.textContent='✗ Failed: '+e.message;console.error(e);}
+}
+
+// ══════════════════════════════════════════════════════════
+// 2. DAY END SALES REPORT
+// ══════════════════════════════════════════════════════════
+function loadDayEndReports(){try{return JSON.parse(localStorage.getItem(DAYEND_KEY)||'[]')}catch{return[]}}
+function saveDayEndReports(r){try{localStorage.setItem(DAYEND_KEY,JSON.stringify(r.slice(0,100)))}catch(e){console.warn('day-end save failed',e)}}
+
+function openDayEndModal(){
+  document.getElementById('modalTitle').textContent='🌙 Day End Sales Report';
+  document.getElementById('modalSub').textContent='Close the day to generate a sales report';
+  renderDayEndModal();
+  document.getElementById('fileModal').classList.add('active');
+}
+function renderDayEndModal(){
+  const reports=loadDayEndReports();
+  const list=document.getElementById('fileList');
+  list.innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <button id="closeDayBtn" onclick="onCloseDayClick()" style="padding:14px;border-radius:8px;border:none;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:13px;font-weight:800;cursor:pointer;letter-spacing:.3px">🔴 Close Day</button>
+      <div id="dayEndFmtChoice" style="display:none;gap:8px">
+        <button onclick="generateDayEnd('pdf')" style="flex:1;padding:10px;border-radius:7px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>
+        <button onclick="generateDayEnd('excel')" style="flex:1;padding:10px;border-radius:7px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">📊 Excel</button>
+      </div>
+      <div id="dayEndStatus" style="font-size:11px;color:var(--muted);text-align:center"></div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">PREVIOUS REPORTS</div>
+        <div id="dayEndList" style="display:flex;flex-direction:column;gap:8px">
+          ${reports.length?reports.map(r=>`<div class="file-item">
+            <span class="file-icon">${r.mode==='auto'?'🕛':'🔴'}</span>
+            <div class="file-info">
+              <div class="file-name">${escH(r.filename)}</div>
+              <div class="file-meta">${new Date(r.generatedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})} · ${r.mode==='auto'?'Auto-generated':'Manual close'}</div>
+            </div>
+            <button class="btn-dl" onclick="redownloadDayEnd('${r.id}')">⬇ Download</button>
+          </div>`).join(''):'<div class="empty">No reports yet</div>'}
+        </div>
+      </div>
+    </div>`;
+}
+function onCloseDayClick(){
+  const btn=document.getElementById('closeDayBtn');
+  btn.style.background='var(--danger)';btn.style.borderColor='var(--danger)';btn.style.color='#fff';
+  document.getElementById('dayEndFmtChoice').style.display='flex';
+}
+async function generateDayEnd(format){
+  const statusEl=document.getElementById('dayEndStatus');
+  statusEl.textContent='Generating…';
+  try{
+    const now=new Date();
+    const dateStr=ymd(now);
+    const dayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,1,0).getTime();
+    const {rows,head}=buildDayEndRows(dayStart,now.getTime());
+    const fname='DayEnd_'+dateStr+'_'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+    const subtitle='Business day '+dateStr+' · closed '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    let dataUrl;
+    const cs={0:{halign:'center'},1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},5:{halign:'center'},6:{halign:'center'}};
+    if(format==='pdf') dataUrl=await buildPdf('Day End Sales Report',subtitle,head,rows,fname+'.pdf',true,cs);
+    else dataUrl=await buildXlsx('Day End Sales',head,rows,fname+'.xlsx',true);
+    const reports=loadDayEndReports();
+    reports.unshift({id:'de_'+Date.now(),date:dateStr,generatedAt:Date.now(),mode:'manual',format,filename:fname+(format==='pdf'?'.pdf':'.xlsx'),dataUrl});
+    saveDayEndReports(reports);
+    const btn=document.getElementById('closeDayBtn');
+    btn.style.background='var(--surface2)';btn.style.borderColor='var(--border)';btn.style.color='var(--text)';
+    document.getElementById('dayEndFmtChoice').style.display='none';
+    statusEl.textContent='✓ Report generated';
+    renderDayEndModal();
+  }catch(e){statusEl.textContent='✗ Failed: '+e.message;console.error(e);}
+}
+function buildDayEndRows(startTs,endTs){
+  const log=JSON.parse(localStorage.getItem('lotteryApp_sales_log')||'[]');
+  const inv=JSON.parse(localStorage.getItem('lotteryApp_inventory')||'[]');
+  const slotsData=JSON.parse(localStorage.getItem('lotteryApp_slots')||'{"slots":[]}');
+  const slots=(slotsData.slots||[]);
+  const maxSlot=slots.length?Math.max(...slots.map(s=>s.slotNumber)):0;
+  const entries=log.filter(e=>e.type==='sale'&&e.timestamp>=startTs&&e.timestamp<=endTs).sort((a,b)=>a.timestamp-b.timestamp);
+  const groups={};
+  entries.forEach(e=>{
+    const key=e.slotNumber+'|'+(e.uniquePackId||'');
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(e);
+  });
+  const bySlot={};
+  Object.entries(groups).forEach(([key,es])=>{
+    const first=es[0],last=es[es.length-1];
+    const startNum=first.ticketNumber-first.ticketsSold;
+    const invItem=inv.find(i=>i.uniquePackId===last.uniquePackId||(i.lotteryId+(i.packId||''))===last.uniquePackId);
+    const total=invItem?parseInt(invItem.totalTickets)||0:0;
+    const newerPack=log.find(e2=>e2.type==='new_pack'&&e2.slotNumber===first.slotNumber&&e2.timestamp>last.timestamp&&e2.timestamp<=endTs&&e2.uniquePackId!==last.uniquePackId);
+    const soldOut=!!newerPack||(total>0&&last.ticketNumber>=total+1);
+    const endDisplay=soldOut?'—':String(last.ticketNumber);
+    const ticketsSold=soldOut&&total>0?(total-startNum+1):(last.ticketNumber-startNum);
+    if(!bySlot[first.slotNumber]) bySlot[first.slotNumber]=[];
+    bySlot[first.slotNumber].push({
+      slot:first.slotNumber,lottery:first.lotteryId||'',pack:last.uniquePackId||'',
+      start:startNum,endDisplay,ticketsSold,price:parsePrice(last.price),
+      firstTs:first.timestamp
+    });
+  });
+  const rowsRaw=[];
+  for(let i=1;i<=maxSlot;i++){
+    if(bySlot[i]){
+      bySlot[i].sort((a,b)=>a.firstTs-b.firstTs);
+      rowsRaw.push(...bySlot[i]);
+    } else {
+      const slot=slots.find(s=>s.slotNumber===i);
+      const cur=slot?(slot.currentTicket||1):'';
+      rowsRaw.push({slot:i,lottery:slot?.lotteryId||'',pack:slot?.uniquePackId||'',start:cur,endDisplay:String(cur),ticketsSold:0,price:0,firstTs:0});
+    }
+  }
+  const head=['Slot #','Game #','Pack #','Start #','End #','Tickets Sold','Sale Amount'];
+  const rows=rowsRaw.map(r=>[r.slot,r.lottery,r.pack,r.start,r.endDisplay,r.ticketsSold,fmtMoney(r.ticketsSold*r.price)]);
+  return {rows,head};
+}
+function redownloadDayEnd(id){
+  const r=loadDayEndReports().find(x=>x.id===id);
+  if(!r) return;
+  const a=document.createElement('a');a.href=r.dataUrl;a.download=r.filename;a.click();
+}
+async function checkAutoDayEnd(){
+  try{
+    const now=new Date();
+    const reports=loadDayEndReports();
+    const closedDates=new Set(reports.map(r=>r.date));
+    // find the most recent calendar day strictly before today that has no report at all
+    const candidate=new Date(now);
+    candidate.setDate(candidate.getDate()-1);
+    const candDateStr=ymd(candidate);
+    // only auto-fire once we're past 00:10 on the day AFTER candidate (i.e. today, past 00:10)
+    const pastCutoff=(ymd(now)!==candDateStr)&&(now.getHours()>0||(now.getHours()===0&&now.getMinutes()>=10));
+    if(!pastCutoff) return;
+    if(closedDates.has(candDateStr)) return;
+    // generate for candidate day: 12:01am to 11:59:59pm of that day
+    const dayStart=new Date(candidate.getFullYear(),candidate.getMonth(),candidate.getDate(),0,1,0).getTime();
+    const dayEnd=new Date(candidate.getFullYear(),candidate.getMonth(),candidate.getDate(),23,59,59,999).getTime();
+    const {rows,head}=buildDayEndRows(dayStart,dayEnd);
+    if(!rows.length) { // still record that this day was checked, to avoid re-checking endlessly
+      reports.unshift({id:'de_'+Date.now(),date:candDateStr,generatedAt:Date.now(),mode:'auto',format:'pdf',filename:'DayEnd_'+candDateStr+'_no-sales.pdf',dataUrl:null,empty:true});
+      saveDayEndReports(reports);
+      return;
+    }
+    const fname='DayEnd_'+candDateStr+'_auto';
+    const subtitle='Business day '+candDateStr+' · auto-generated (day not manually closed)';
+    const cs={0:{halign:'center'},1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},5:{halign:'center'},6:{halign:'center'}};
+    const dataUrl=await buildPdf('Day End Sales Report',subtitle,head,rows,fname+'.pdf',false,cs);
+    reports.unshift({id:'de_'+Date.now(),date:candDateStr,generatedAt:Date.now(),mode:'auto',format:'pdf',filename:fname+'.pdf',dataUrl});
+    saveDayEndReports(reports);
+  }catch(e){console.warn('checkAutoDayEnd failed',e);}
+}
+
+// ══════════════════════════════════════════════════════════
+// 3. LIVE SLOTS
+// ══════════════════════════════════════════════════════════
+function openLiveSlotsModal(){
+  document.getElementById('modalTitle').textContent='📡 Live Slots';
+  document.getElementById('modalSub').textContent='Auto-updating · click Print to print or save as PDF';
+  const list=document.getElementById('fileList');
+  list.innerHTML=`
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn-dl" onclick="printLiveSlots()">🖨 Print</button>
+    </div>
+    <div id="liveSlotsTableWrap"></div>`;
+  renderLiveSlotsTable();
+  _liveRefreshTimer=setInterval(renderLiveSlotsTable,2000);
+  document.getElementById('fileModal').classList.add('active');
+}
+function renderLiveSlotsTable(){
+  const wrap=document.getElementById('liveSlotsTableWrap');
+  if(!wrap) return;
+  const slotsData=JSON.parse(localStorage.getItem('lotteryApp_slots')||'{"slots":[]}');
+  const slots=(slotsData.slots||[]).slice().sort((a,b)=>a.slotNumber-b.slotNumber);
+  const maxSlot=slots.length?Math.max(...slots.map(s=>s.slotNumber)):0;
+  const rows=[];
+  for(let i=1;i<=maxSlot;i++){
+    const slot=slots.find(s=>s.slotNumber===i);
+    const active=slot&&slot.uniquePackId&&!slot.isFinished;
+    rows.push({
+      n:i,
+      pack:active?String(slot.uniquePackId).slice(-4):'',
+      cur:active?(slot.currentTicket||1):''
+    });
+  }
+  const rawPerBlock=Math.ceil(rows.length/3)||1;
+  const perBlock=Math.ceil(rawPerBlock/4)*4;
+  const blocks=[rows.slice(0,perBlock),rows.slice(perBlock,perBlock*2),rows.slice(perBlock*2,perBlock*3)];
+  const blockHtml=blocks.map(block=>{
+    const trs=block.map(r=>{
+      const shaded=Math.floor((r.n-1)/4)%2===1;
+      return `<tr class="${shaded?'ls-shade':''}">
+        <td style="text-align:center">${r.n}</td><td style="text-align:center">${escH(r.pack)}</td><td style="text-align:center">${escH(String(r.cur))}</td><td style="text-align:center"></td>
+      </tr>`;
+    }).join('');
+    return `<table style="border-collapse:collapse;width:100%;font-size:11px;table-layout:fixed">
+      <colgroup><col style="width:22%"><col style="width:22%"><col style="width:28%"><col style="width:28%"></colgroup>
+      <tbody>${trs}</tbody>
+    </table>`;
+  }).join('');
+  wrap.innerHTML=`<div id="liveSlotsPrintArea" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start">${blockHtml}</div>
+    <style>
+      #liveSlotsPrintArea table{border:1px solid var(--border)}
+      #liveSlotsPrintArea td{border:1px solid var(--border);padding:4px 6px;color:var(--text)}
+      #liveSlotsPrintArea tr.ls-shade{background:rgba(255,255,255,.06)}
+    </style>`;
+}
+function printLiveSlots(){
+  const area=document.getElementById('liveSlotsPrintArea');
+  if(!area) return;
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  const timeStr=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}).replace(/:/g,'-').replace(/\s/g,'');
+  const title='Live Slots '+dateStr+' '+timeStr;
+  const fullHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title><style>'+
+    '*{box-sizing:border-box;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}'+
+    'table{border-collapse:collapse;width:100%;font-size:11px}'+
+    'td{border:1px solid #000;padding:4px 6px}'+
+    'tr.ls-shade{background:#e3e3e3}'+
+    '@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}}'+
+    '</style></head><body>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start">'+area.innerHTML+'</div>'+
+    '<script>window.onload=function(){document.title='+JSON.stringify(title)+';setTimeout(function(){window.focus();window.print();},150);};<\/script>'+
+    '</body></html>';
+  const blob=new Blob([fullHtml],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),15000);
+}
+
+function refreshAll(){ render(); }
 
 // ── THEME ─────────────────────────────────────────────────
 function applyExternalTheme(theme){
@@ -615,7 +712,8 @@ async function importFullBackup(input){
   }catch(e){setBackupStatus('✗ Import failed: '+e.message,'var(--danger)');console.error(e);}
 }
 
-autoPopulateRepo();
+checkAutoDayEnd();
+setInterval(checkAutoDayEnd,60000);
 render();
 </script>
 </body>
