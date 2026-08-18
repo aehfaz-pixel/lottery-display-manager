@@ -31,8 +31,8 @@ A custom Electron desktop app for managing scratch lottery tickets in a retail s
 
 ## 3. Current state (last verified)
 
-- **Version:** v1.0.38
-- **Status:** ✅ Fully working — everything from v1.0.34 still confirmed functional, PLUS a major TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, a critical release-pipeline bug fix (§12), and Preview Scan Mode (§13) — all verified end-to-end on dev and real packaged/installed builds, including a live auto-update test from v1.0.35 → v1.0.37 and a clean v1.0.38 release.
+- **Version:** v1.0.39 — shipped, published to GitHub, real installed-app auto-update confirmed working by user.
+- **Status:** ✅ v1.0.38 base fully working as previously verified, PLUS the sales-log reversal fix and full Repository reports overhaul (§15) — released in v1.0.39. `npm run release` completed clean: pre-release check passed, `fix-release.js` matched the exact current version with no stale-build issue, GitHub release published as Latest, and the user confirmed the real installed app downloaded and applied the update successfully.
 - **Git:** Repo tracked, pushed to `origin/main`. Run `git log -1` to confirm the current commit hash — this file isn't auto-updated with it.
 - **Auto-update flow confirmed:** app checks 5s after launch → downloads differentially → shows yellow "Downloading... X%" bar → shows green "Restart & Install" bar → silent install → auto-relaunch on new version.
 - **Full backup import confirmed:** on a completely fresh install, importing a `.lotterybackup` file correctly restores ALL data — verified with 86 real slots on 2 separate fresh devices, and again during the v1.0.29→v1.0.30 device migration.
@@ -709,7 +709,51 @@ Diagnostics logging (`ipc` category) was added at every link in this chain (`req
 
 ---
 
-## 14. Future ideas — brainstormed, not started (read before assuming these exist)
+## 15. Sales-Log Reversal Fix + Repository Reports Overhaul — unreleased (2026-08-18, session after v1.0.38)
+
+**Status: released in v1.0.39 (2026-08-18). Built, published to GitHub, and confirmed working via real installed-app auto-update by the user.**
+
+### 15a. Sales-log reversal fix
+**Bug:** Home's 5 running metric cards (This Month/Last Month/Today/Yesterday Sales + Total Inventory Value) derive from `lotteryApp_sales_log`, which is only ever appended to on a sale via `logSale()`. That function had `if(newCount<=prevCount) return;` — so manually reducing a slot's `currentTicket` in Manager (correcting a mis-scan, or a return) never wrote any entry, positive or negative. Result: the original sale stayed in the log forever, permanently double-counting against the corrected/returned amount. Reproducible: sell 2×$10 tickets → Home shows $20 → reduce by 1 ticket (return) → Home still shows $20 instead of $10.
+**Fix:** `logSale(slot,prevCount,newCount)` now only skips a true no-op (`if(newCount===prevCount) return;`), so a decrease writes a negative `ticketsSold` entry. Both call sites — `bumpTicket()` and `setTicket()` in `lottery-manager.html` — changed from `if(n>prev) logSale(...)` to `if(n!==prev) logSale(...)` so decreases actually reach `logSale` at all.
+**No change needed on Home's side** — `salesInRange()` in `lottery-home.html` sums `ticketsSold||1` and multiplies by price; a negative `ticketsSold` value flows through correctly (negative numbers are truthy in JS, so `||1` doesn't interfere), and the running total nets out correctly with no further changes.
+**Files touched:** `lottery-manager.html` only.
+
+### 15b. Repository reports overhaul
+**Removed entirely:** all 7 previous report types in `lottery-repository.html` — Sales Log, Nightly Report, Slot Barcodes, Inventory CSV, Inventory PDF, DB Export, Winners — along with their generator code (`autoPopulateRepo()`, `switchModalTab()`, `renderDeliveryTab()`, `downloadDelivery()`, the old `openLiveModal()`/`downloadBarcodes()` for Slot Barcodes, `renderFileList()`/`dlFile()`/`delFile()`). **Full App Backup and Auto Backup were explicitly untouched** — `buildBackupObject()`, `exportFullBackup()`, `importFullBackup()`, `runAutoBackupIfNeeded()`, `openAutoBackupFolder()` all unchanged.
+**Known dead code left behind (out of scope, flagged not fixed):** `adminRepoSave()` calls in `lottery-admin.html` and `repoSave()` calls in `lottery-manager.html` still write to the now-unread `lotteryApp_repository` localStorage key. Harmless — nothing reads that key anymore — but worth a cleanup pass eventually.
+
+**New report 1 — Inventory Log:**
+- Modal: date-type toggle (Loaded Date / Activated Date) above a manual start/end date range, plus calendar-based presets — This Month (1st of month → today), Last Month (full prior calendar month), Last 30 Days (rolling, today−30 → today), This Year (Jan 1 → today). Presets populate the date fields; fields remain manually editable after.
+- Filter: include inventory items whose selected date field (`loadedAt` or `activatedAt`) falls in range. Items missing that field (e.g. never activated, filtering by Activated Date) are excluded.
+- Output: user picks PDF or Excel before generating. All 10 Inventory tab columns (Lottery Name, Pack Barcode, Lottery ID, Price, Total Tickets, Loaded, Activated, Current Ticket, Settled, Sold Out), same display logic as the Inventory tab (e.g. "—" if not activated, "Sold Out" text if finished).
+- Sort: chronological by the filter date field, latest first.
+- Filename: `Inventory_Log_<start>_to_<end>.<ext>`.
+- PDF: all columns except Lottery Name centered, including header cells (see Reporting Standards in CLAUDE.md for the `didParseCell` technique used).
+
+**New report 2 — Day End Sales Report:**
+- Modal: "Close Day" button/toggle. Pressing it any time during the day generates a report covering 12:01am → press time, offers PDF or Excel choice, downloads it, adds it to the "previous reports" list (stored in `lotteryApp_dayend_reports`, newest first, re-downloadable from the modal), then the toggle immediately resets — can be pressed multiple times in one day, each press generates a new snapshot.
+- Auto-generation: if a calendar day passes with **zero** manual closes at all, the app auto-generates a report for that day — either at 12:10am the following day (if the app happens to be open then) or, if not, the first time the app is opened afterward. Auto-generated reports always save as PDF (no format choice) and are tagged `mode:'auto'` in the list, vs `mode:'manual'`.
+- **Explicit design decision (confirmed with user):** if a day has *any* manual close — even a single one at 3pm with nothing after — auto-generation does **not** fill the remaining gap (3pm→midnight). A day is considered "handled" for auto-gen purposes the moment it has any report at all, regardless of what time that report covers. User confirmed this is the intended behavior, not a bug.
+- Table columns: Slot #, Game # (Lottery ID), Pack # (uniquePackId), Start # (ticket count at period start), End # (ticket count at period end, or "—" if the pack sold out/was replaced mid-period), Tickets Sold, Sale Amount.
+- Sort: by Slot # ascending.
+- **Mid-day pack change handling:** if a slot's pack was fully sold and replaced with a new pack within the reporting period, the slot number repeats — one row for the old pack (End # shown as "—", Tickets Sold computed as `totalTickets − Start# + 1`, i.e. NOT treated as 0 despite the "—" display) immediately followed by one row for the new pack (Start #=1, actual End #, computed normally).
+- **All slots included, even zero-activity ones** (fixed after initial version only included slots with sale-log activity that day) — a slot with no sales that day shows Start#=End#=current ticket count, Tickets Sold=0, Sale Amount=$0. Rows built by iterating every slot number 1..maxSlot, not just ones with log entries.
+- Data source: computed from `lotteryApp_sales_log` 'sale'-type entries within the period, grouped by slot+pack — NOT from any day-boundary snapshot (none exists). Start# for a group = first entry's `ticketNumber - ticketsSold`; End# = last entry's `ticketNumber`, unless a `new_pack` log entry for that slot with a different `uniquePackId` occurs later in the period (sold-out-and-replaced detection) or the computed End# exceeds the pack's known `totalTickets` (from the matching Inventory record) — either case triggers the "—"/sold-out display.
+- All 7 columns centered in PDF, including headers.
+- Filename: manual = `DayEnd_<date>_<HHMM>.<ext>`; auto = `DayEnd_<date>_auto.pdf`.
+
+**New report 3 — Live Slots:**
+- Modal opens with a live-refreshing (every 2s) table, re-reading `lotteryApp_slots` from localStorage directly — no stored file, always current.
+- Layout: 4 columns per table (Slot #, last 4 digits of Pack ID, Current Ticket, blank notes column), split across 3 side-by-side tables. Every configured slot 1..maxSlot gets a row, including empty/sold-out ones (blank Pack ID/Current Ticket, row still present — not excluded).
+- Block-splitting: rows per table = `Math.ceil(Math.ceil(totalSlots/3)/4)*4` — rounded up to the nearest multiple of 4 so a shaded group-of-4 is never split across two tables. Table 1 fills first, then table 2, then table 3 gets the remainder.
+- Shading: alternating light highlight every group of 4 slots (`Math.floor((slotNum-1)/4)%2===1`), applied via a `.ls-shade` CSS class (not inline `rgba(...)` — see Reporting Standards, string-matching inline colors between contexts is unreliable).
+- All cells centered; Current Ticket and blank columns equal width (28%/28%), Slot#/Pack ID equal width (22%/22%).
+- Print button opens the browser's native print dialog (real printer or Save-as-PDF) via a Blob-URL navigation (not `document.write` into a blank popup — unreliable title-setting, especially in Electron). Print window's `<title>` is `Live Slots <MM-DD-YYYY> <HH-MMAM/PM>`, used by the OS/browser as the suggested Save-as-PDF filename. `print-color-adjust:exact` forced in both base and `@media print` CSS so the shading isn't stripped on print (browsers strip background colors by default otherwise).
+
+**Files touched:** `lottery-repository.html` only (all 3 reports + backup untouched), `lottery-manager.html` (§15a).
+
+
 
 These are **design-only discussions**, not implemented, not scoped, no code written. Logged here purely so a future chat doesn't lose the context or accidentally re-derive the same reasoning from scratch. Do not treat anything in this section as "in progress" — nothing here has been started.
 

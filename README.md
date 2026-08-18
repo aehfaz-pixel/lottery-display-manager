@@ -24,7 +24,7 @@ lottery-electron/
         ├── lottery-manager.html    ← Main scanning/slot management, Customize display settings
         ├── lottery-admin.html      ← Lottery types DB + Inventory (separate from Manager, not standalone/legacy)
         ├── lottery-display.html    ← TV display (fullscreen slot grid, jackpot banner, promo/ad slideshow)
-        ├── lottery-repository.html ← Reports, full backup export/import, daily auto-backup
+        ├── lottery-repository.html ← Reports (Inventory Log, Day End Sales Report, Live Slots), full backup export/import, daily auto-backup
         ├── lottery-diagnostics.html← Diagnostics tab — live event timeline, error log, layout inspector viewer
         └── diagnostics.js          ← Shared library loaded by every page above — see "Diagnostics" section below
 ```
@@ -85,6 +85,14 @@ See `PROJECT_STATUS.md` §11 for the full technical architecture if you're exten
 - Scanning a brand-new lottery ID in Add Inventory doesn't block further scanning — it shows a "🔄 Looking up..." placeholder and fills in automatically once the lookup finishes in the background.
 - Admin's "🔄 Refresh"/"Sync All" only fetches lotteries missing data — it never re-checks ones already known.
 - Inventory's "🔄 Refresh" button re-syncs each item's name/price/pack size from Admin's current data (one-way: Admin → Inventory), in addition to refreshing the view.
+
+## Reports (Repository tab)
+
+Three report types, all generated on-demand (nothing auto-saved to a file library like older versions — see CHANGELOG for what was removed):
+
+- **Inventory Log** — filter Inventory by Loaded Date or Activated Date, using a manual range or presets (This Month / Last Month / Last 30 Days / This Year). Export as PDF or Excel, all 10 Inventory columns, sorted latest-first by the filter date.
+- **Day End Sales Report** — press "Close Day" any time to generate a report covering 12:01am up to that moment (choose PDF or Excel); can be pressed more than once a day, each press makes a new snapshot. If a day passes with no manual close at all, the app auto-generates one (always PDF) at 12:10am or the next time the app opens, whichever comes first. Every configured slot appears, even with zero sales that day. Previous reports are listed in the modal and re-downloadable.
+- **Live Slots** — an always-current, auto-refreshing table of every slot's Pack ID and current ticket number, split across 3 side-by-side tables. Has a Print button that opens your normal print dialog — pick a real printer or Save as PDF.
 
 ## Data & Backups
 

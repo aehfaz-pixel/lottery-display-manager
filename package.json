@@ -1,6 +1,6 @@
 {
   "name": "lottery-electron",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "description": "Lottery Manager — Electron App",
   "author": "Lottery Manager",
   "main": "main.js",

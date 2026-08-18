@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.39 — 2026-08-18
+- Fixed: manually reducing a ticket count in Manager (e.g. correcting a mis-scan or a return) never subtracted the reversed amount from Home's sales figures — `logSale()` only ever logged increases, so a correction stayed permanently double-counted in This Month/Last Month/Today/Yesterday Sales. Now logs a signed entry on any change, in either direction.
+- Removed: all 7 previous Repository report types (Sales Log, Nightly Report, Slot Barcodes, Inventory CSV, Inventory PDF, DB Export, Winners) — replaced by 3 new reports below. Full App Backup / Auto Backup untouched.
+- Added: **Inventory Log** report — filter Inventory by Loaded Date or Activated Date, manual range or presets (This Month/Last Month/Last 30 Days/This Year), export as PDF or Excel, all 10 Inventory columns.
+- Added: **Day End Sales Report** — manual "Close Day" (any time, any number of presses per day, each generates a new snapshot from 12:01am to press time) or automatic generation at 12:10am / next app-open if never manually closed that day. Table columns: Slot #, Game #, Pack #, Start #, End #, Tickets Sold, Sale Amount. Every configured slot appears even with zero sales that day; a slot that changed packs mid-day gets one row per pack. Manual closes choose PDF or Excel; auto-generated reports are always PDF. Previous reports listed and re-downloadable in the modal.
+- Added: **Live Slots** report — auto-refreshing live table (Slot #, last-4 of Pack ID, Current Ticket, blank notes column) split across 3 side-by-side tables, filled group-of-4-aligned so a shaded 4-slot group is never split across tables. Native browser print (pick a real printer or Save-as-PDF).
+- Added: `PROJECT_STATUS.md` now has a dedicated Reporting Standards section (alignment, print-color-adjust, filename-via-Blob-URL technique, Excel styling limitation) — see CLAUDE.md, read before touching any report generator.
+
 ## v1.0.38 — 2026-08-18
 - Added: Preview Scan Mode — a toggleable second scan mode in Manager. When ON, scans batch into a review-before-save summary (image, name, composite ID, editable quantity, $ total) instead of applying instantly; Cancel discards the whole batch, Save applies it in one combined update. Quantity reflects the ticket range sold (e.g. currently on #5, scan #10 → 6 tickets), not the number of physical scans. See `PROJECT_STATUS.md` §13 for full details.
 - Fixed: a scan landing in a focused search box (Admin or Inventory) left a stray `~` in the search term — now stripped automatically.

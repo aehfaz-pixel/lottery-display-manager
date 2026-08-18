@@ -5,7 +5,7 @@
 ## What this is
 Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Node/Express backend + 7 HTML renderer files loaded as same-origin iframes sharing `localStorage`. Global OS-level keyboard hook (`uiohook-napi`) for barcode scanning. Auto-updates via GitHub Releases (`aehfaz-pixel/lottery-display-manager`, public repo).
 
-**Current version:** v1.0.38 — fully working, verified end-to-end. Includes Preview Scan Mode (§13).
+**Current version:** v1.0.39 — shipped, published to GitHub, real installed-app update confirmed working. Includes sales-log reversal fix + full Repository reports overhaul (see below and PROJECT_STATUS.md §15).
 
 ## Before making any change
 1. Read `PROJECT_STATUS.md` in full — it has architecture, file map, full bug history, the Diagnostics system (§11), the TLC/storage/release-pipeline overhaul (§12), Preview Scan Mode (§13 — read this before touching Manager's scan pipeline, `routeBarcode()`, or the bring-to-front chain), and pure future-ideas brainstorm (§14).
@@ -31,6 +31,12 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 ## Recently added (v1.0.38)
 - **Preview Scan Mode** (§13): a toggleable second scan mode in Manager — batch scans into a review-before-save summary instead of applying instantly. Involved a non-obvious two-part "bring to foreground" fix (shell tab-switch vs. true OS-level focus, via a `setAlwaysOnTop` toggle to bypass Windows' foreground-lock) and a routing override in `lottery-app.html`'s `routeBarcode()` so scans reach Manager even when Admin/Inventory is the active tab. Read §13 in full before touching Manager's scan pipeline, `routeBarcode()`, or the bring-to-front chain in `main.js`.
 
+## Recently added (v1.0.39, 2026-08-18)
+- **Sales-log reversal fix**: `logSale()` in `lottery-manager.html` used to skip any ticket-count decrease entirely (`if(newCount<=prevCount) return;`), so a manual correction/return never subtracted from Home's sales figures — permanent double-count. Now logs a signed entry on any change (`if(newCount===prevCount) return;`), and both `bumpTicket()`/`setTicket()` call `logSale` unconditionally on change in either direction. No change was needed on the Home side — `salesInRange()` already sums negative `ticketsSold` values correctly.
+- **Repository reports overhaul**: all 7 previous report types deleted (Sales Log, Nightly Report, Slot Barcodes, Inventory CSV, Inventory PDF, DB Export, Winners) — Full App Backup / Auto Backup untouched. Replaced with 3 new reports in `lottery-repository.html`: **Inventory Log** (date-range filtered export of all 10 Inventory columns, PDF/Excel), **Day End Sales Report** (manual "Close Day" any time/any number of presses, or auto-generated at 12:10am/next-open if never manually closed that day — see §15 for the full spec incl. sold-out-mid-day pack-split handling), and **Live Slots** (auto-refreshing 3-table live view with native print). Full spec and open decisions in PROJECT_STATUS.md §15.
+- **Known dead code from this change, not yet cleaned up:** `adminRepoSave`/`repoSave` calls still exist in `lottery-admin.html`/`lottery-manager.html`, writing to the now-unused `lotteryApp_repository` key that `lottery-repository.html` no longer reads. Harmless (nothing reads it), but flagged for a future cleanup pass — out of scope for this change.
+- **Still queued, not started:** TLC fetch-consolidation in `lottery-admin.html` (~7 scattered `fetch()` call sites → 1 shared function) — user has explicitly said not to start until asked.
+
 ## Reporting Standards (PDF/Excel) — read before touching any report generator
 Applies to every report this app generates (Inventory Log, Day End Sales Report, Live Slots, and any future report type):
 - **Header cells must match their column's data alignment.** jsPDF-autotable's `columnStyles.halign` does NOT reliably cascade to header cells — force alignment explicitly via a `didParseCell` hook applied to every cell (head + body alike). See `lottery-repository.html`'s `buildPdf()`.
@@ -40,6 +46,22 @@ Applies to every report this app generates (Inventory Log, Day End Sales Report,
 - Don't sync shading colors between a live view and a print window via string-replacing inline `rgba(...)` — browsers reserialize inline styles (spacing, leading zeros) and silently break exact-string matches. Use a shared CSS class instead, defined independently in each context.
 - **Default filenames for native print/Save-as-PDF:** the OS/browser dialog's suggested filename comes from `<title>`. Don't set it via `document.write` into a blank popup + delayed `document.title=` — unreliable, especially in Electron. Instead build the full HTML (title included) as a string, wrap in a `Blob`, and `window.open()` the Blob URL directly (real navigation, title parsed normally); trigger `window.print()` from an inline script embedded in that document's own `onload`.
 - **Excel limitation:** reports use the free/community SheetJS build (`xlsx.full.min.js` via CDN) — no cell styling support (alignment/fill/bold). Only PDF output gets the alignment/shading treatment above. If Excel styling is ever required, it needs a different library (e.g. ExcelJS) — flag to the user rather than silently skipping it.
+
+## Project location & environment
+- Local project root: `D:\Store\Lottery\lottery-electron` (Windows machine — always specify Windows paths, not Unix-style, when giving the user commands to run locally).
+- Release builds require a **VS Developer Command Prompt** specifically (for native module rebuilds — `uiohook-napi`). Regular `cmd`/PowerShell is fine for everyday dev/testing (`npm run dev`), git, and doc edits — only the actual `npm run release` build step needs the VS Dev prompt.
+- GitHub repo: `aehfaz-pixel/lottery-display-manager` (public).
+
+## Release procedure — step order, every time
+1. **Clear stale build artifacts first** (critical — a stale leftover build caused a real bad release, v1.0.36, before `fix-release.js` was hardened): from the project root, `del dist\*.exe`, `del dist\*.blockmap`, `del dist\*.yml`.
+2. **Commit source changes** (`git add .` && `git commit -m "..."`) *before* releasing — the release pipeline bumps version/builds/publishes but doesn't manage your commit message.
+3. **Run `npm run release`** from a VS Developer Command Prompt, in the project root — this runs `pre-release-check.js` → bumps version → syncs the HTML version tag (`sync-version.js`) → builds → publishes to GitHub.
+4. **Watch for:** `pre-release-check.js` failing (missing autoUpdater/updateBar code — shouldn't happen unless `main.js`/`lottery-app.html`'s update-bar code was touched), or `fix-release.js` refusing to find a matching build (means step 1 wasn't done cleanly, or the build silently failed).
+5. **After publish:** confirm the release shows on GitHub as "Latest" (not draft — see `private:false`/`releaseType:"release"` invariant above), then do a final verification pass on the **actual installed build** — `npm run dev` does NOT test the updater, auto-backup, or window-focus routing.
+6. **Update docs as part of every release, not after the fact:** move the "Unreleased" CHANGELOG.md entry under the new version number/date, bump `PROJECT_STATUS.md`'s "Current state" line, and update this file's "Current version" line to reflect what's now actually live.
+
+## When to resume a queued task
+If `CLAUDE.md`/`PROJECT_STATUS.md` list something under "queued"/"not started" (e.g. TLC fetch-consolidation as of this writing), do not start it proactively — wait for explicit user instruction, even if it seems like a natural next step after a related task.
 
 ## File map (what to open for what)
 | Concern | File(s) |
@@ -52,7 +74,7 @@ Applies to every report this app generates (Inventory Log, Day End Sales Report,
 | Scanning logic, `renderGrid()`, Customize modal | `lottery-manager.html` |
 | Lottery DB + Inventory (both iframes of same file) | `lottery-admin.html` |
 | TV display | `lottery-display.html` |
-| Reports, backup export/import | `lottery-repository.html` |
+| Reports (Inventory Log, Day End Sales Report, Live Slots), backup export/import | `lottery-repository.html` |
 | Diagnostics tab UI | `lottery-diagnostics.html` |
 | Diagnostics shared engine | `diagnostics.js` (loaded by all 7 renderer files) |
 | Version bump propagation | `sync-version.js`, `package.json` |
