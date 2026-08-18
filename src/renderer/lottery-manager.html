@@ -329,6 +329,7 @@ html[data-theme="light"] .slot-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.18)}
   <button class="hdr-btn" onclick="openCustomizeModal()">🎨 Customize</button>
   <button class="hdr-btn" onclick="openWinnerModal()" style="background:#0d2618;color:#3fb950;border-color:#1a4a25">🏆 Add Winner</button>
   <button class="hdr-btn" onclick="openSettleModal()" style="background:#052e16;color:#fbbf24;border-color:#14532d;font-weight:700">✅ Settle</button>
+  <button class="hdr-btn" id="previewModeBtn" onclick="togglePreviewMode()" title="When ON, scans are batched into a review-before-save summary instead of applying instantly">🔍 Preview Scan: OFF</button>
   <button class="hdr-btn gold" onclick="pushToDisplay()">▶ Push Now</button>
 </header>
 
@@ -498,6 +499,23 @@ html[data-theme="light"] .slot-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.18)}
 </div>
 
 <!-- WINNER MODAL -->
+<!-- PREVIEW SCAN MODE MODAL -->
+<div class="overlay" id="previewScanModal" style="display:none">
+  <div class="modal" style="width:700px;max-height:82vh;display:flex;flex-direction:column">
+    <h2 style="color:#fbbf24">🔍 Preview Sale</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review scanned packs below. Adjust quantities if needed, then Save to apply, or Cancel to discard everything.</div>
+    <div id="previewRows" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:8px;margin-bottom:10px"></div>
+    <div id="previewTotalRow" style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-weight:800;font-size:18px;margin-bottom:14px">
+      <span>Total</span>
+      <span><span id="previewTotalQty">0</span> tickets &nbsp;·&nbsp; $<span id="previewTotalAmt">0.00</span></span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-sec" onclick="previewCancel()">Cancel</button>
+      <button class="btn btn-success" onclick="previewSave()">💾 Save Sale</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="settleModal" style="display:none" onclick="if(event.target===this)closeSettleModal()">
   <div class="modal" style="width:440px">
     <h2 style="color:#fbbf24">✅ Settle Pack</h2>
@@ -765,6 +783,36 @@ let selectedSlot=null; // slot number
 let pendingPackOverride=null; // {code, slotNumber} — held when pack ID mismatch needs override
 let lastScanUndo=null; // {slotNumber, fromTicket, toTicket} — set after each scan-driven advance, cleared on next scan or manual change
 
+// ── PREVIEW SCAN MODE ──────────────────────────────────────
+// When ON, scans matching an ACTIVE slot are batched into a review-before-
+// save summary instead of applying instantly. Scans that don't match an
+// active slot are completely unaffected by this toggle — they always go
+// through the existing new-pack-assignment flow regardless.
+const PREVIEW_MODE_KEY='lotteryApp_previewScanMode';
+let previewModeOn = localStorage.getItem(PREVIEW_MODE_KEY)==='1';
+// Batch entries keyed by compositeId (lotteryId+packId):
+// { lotteryId, packId, compositeId, slotNumber, lot, startTicket, highestTicket, qty }
+let previewBatch = {};
+
+function togglePreviewMode(){
+  if(Object.keys(previewBatch).length>0){
+    toast('Save or Cancel the current preview sale before toggling','warn');
+    return;
+  }
+  previewModeOn=!previewModeOn;
+  localStorage.setItem(PREVIEW_MODE_KEY, previewModeOn?'1':'0');
+  updatePreviewModeBtn();
+  toast('Preview Scan Mode: '+(previewModeOn?'ON':'OFF'), previewModeOn?'ok':'info');
+}
+function updatePreviewModeBtn(){
+  const btn=document.getElementById('previewModeBtn');
+  if(!btn) return;
+  btn.textContent='🔍 Preview Scan: '+(previewModeOn?'ON':'OFF');
+  btn.style.background = previewModeOn ? '#052e2e' : '';
+  btn.style.color = previewModeOn ? '#2dd4bf' : '';
+  btn.style.borderColor = previewModeOn ? '#0f766e' : '';
+}
+
 // ── GLOBAL SCANNER (fires when NO input is focused) ───────
 // Only accepts tilde-prefixed input (Scanner 1 / lottery scanner), matching
 // the same policy enforced by the OS-level hook in main.js. Unprefixed
@@ -822,6 +870,13 @@ function globalBarcode(code){
         setTimeout(()=>setScan('ready'),6000);
         return;
       }
+      if(previewModeOn){
+        reqBringToFront();
+        addToPreviewBatch(existing, compositeId, ticketNum);
+        setScan('ok',`✓ Added to preview: slot #${existing.slotNumber} ticket #${ticketNum}`);
+        setTimeout(()=>setScan('ready'),3000);
+        return;
+      }
       const prevCount=existing.currentTicket;
       const _diagBefore = window.Diag ? JSON.parse(JSON.stringify(existing)) : null;
       pushHistory(existing,prevCount);
@@ -842,6 +897,9 @@ function globalBarcode(code){
       toast(`Slot #${existing.slotNumber} → next ticket #${ticketNum+1}`,'ok');
     } else {
       // Pack not found in any slot — route intelligently regardless of selected slot
+      // NOTE: Preview Mode does NOT affect this branch at all — per spec,
+      // scans that don't match an active slot always go through the
+      // existing new-pack-assignment flow, toggle or not.
       const selSlot = selectedSlot !== null ? getSlot(selectedSlot) : null;
       const selEmpty = selSlot && !selSlot.lotteryDbId;
       const selSoldOut = selSlot && selSlot.isFinished === true;
@@ -866,6 +924,111 @@ function globalBarcode(code){
 }
 
 // ── NEW LOTTERY ASSIGNMENT FROM 14-DIGIT BARCODE ─────────
+// ── PREVIEW SCAN MODE — BATCH LOGIC ───────────────────────
+// Quantity for a row = (highestTicket - startTicket) + 1 — i.e. the RANGE
+// of tickets sold, not the number of physical scans. E.g. slot currently
+// on ticket 5, scan ticket 10 in one go → 6 tickets sold (5,6,7,8,9,10),
+// matching how a single normal scan already treats a gap as tickets sold
+// in between, not "1 event". Manual +/- edits directly set qty; Save uses
+// qty as-is (startTicket + qty), never recalculating from highestTicket,
+// so a manual correction is always respected exactly.
+function addToPreviewBatch(slot, compositeId, ticketNum){
+  let row = previewBatch[compositeId];
+  if(!row){
+    row = {
+      lotteryId: slot.lotteryId, packId: slot.packId, compositeId,
+      slotNumber: slot.slotNumber,
+      lot: getLottery(slot),
+      startTicket: slot.currentTicket, // slot's ticket count BEFORE this batch touches it
+      highestTicket: ticketNum,
+      qty: (ticketNum - slot.currentTicket) + 1,
+    };
+    previewBatch[compositeId] = row;
+  } else {
+    if(ticketNum > row.highestTicket){
+      row.highestTicket = ticketNum;
+      row.qty = (row.highestTicket - row.startTicket) + 1;
+    }
+    // If ticketNum <= row.highestTicket (e.g. duplicate/out-of-order scan),
+    // qty is left as-is — already covers this ticket within the range.
+  }
+  if(row.qty < 1) row.qty = 1;
+  renderPreviewModal();
+  document.getElementById('previewScanModal').style.display='flex';
+}
+
+function previewAdjustQty(compositeId, delta){
+  const row = previewBatch[compositeId];
+  if(!row) return;
+  row.qty = Math.max(1, row.qty + delta);
+  renderPreviewModal();
+}
+
+function previewRemoveRow(compositeId){
+  delete previewBatch[compositeId];
+  if(Object.keys(previewBatch).length===0){
+    previewCancel();
+  } else {
+    renderPreviewModal();
+  }
+}
+
+function renderPreviewModal(){
+  const wrap = document.getElementById('previewRows');
+  const rows = Object.values(previewBatch);
+  let totalQty = 0, totalAmt = 0;
+  wrap.innerHTML = rows.map(row=>{
+    const price = parseFloat((row.lot && row.lot.price ? row.lot.price : '0').replace(/[^0-9.]/g,'')) || 0;
+    const amt = price * row.qty;
+    totalQty += row.qty; totalAmt += amt;
+    const img = resolveImg(row.lot ? row.lot.image : null);
+    return `<div style="display:flex;align-items:center;gap:16px;padding:14px 16px;border-bottom:1px solid var(--border)">
+      ${img?`<img src="${img}" style="width:56px;height:76px;object-fit:cover;border-radius:5px;flex-shrink:0" alt="">`:`<div style="width:56px;height:76px;background:var(--surface2);border-radius:5px;flex-shrink:0"></div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:16px">${escH(row.lot?row.lot.name:'Unknown')}</div>
+        <div style="font-size:13px;color:var(--text);opacity:.75;font-family:monospace;margin-top:7px">${escH(row.compositeId)} · Slot #${row.slotNumber}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-sec btn-sm" style="width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;line-height:1;font-size:16px" onclick="previewAdjustQty('${row.compositeId}',-1)">−</button>
+        <span style="min-width:30px;text-align:center;font-weight:700;font-size:17px">${row.qty}</span>
+        <button class="btn btn-sec btn-sm" style="width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;line-height:1;font-size:16px" onclick="previewAdjustQty('${row.compositeId}',1)">+</button>
+      </div>
+      <div style="min-width:80px;text-align:right;font-weight:700;font-size:16px">$${amt.toFixed(2)}</div>
+      <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px" onclick="previewRemoveRow('${row.compositeId}')" title="Remove this pack from the sale">✕</button>
+    </div>`;
+  }).join('') || '<div style="padding:24px;text-align:center;color:var(--muted)">No packs scanned yet</div>';
+  document.getElementById('previewTotalQty').textContent = totalQty;
+  document.getElementById('previewTotalAmt').textContent = totalAmt.toFixed(2);
+}
+
+function previewCancel(){
+  previewBatch = {};
+  document.getElementById('previewScanModal').style.display='none';
+}
+
+function previewSave(){
+  const rows = Object.values(previewBatch);
+  if(!rows.length){ previewCancel(); return; }
+  rows.forEach(row=>{
+    const slot = getSlot(row.slotNumber);
+    if(!slot) return;
+    const prevCount = slot.currentTicket;
+    const newCount = row.startTicket + row.qty;
+    const _diagBefore = window.Diag ? JSON.parse(JSON.stringify(slot)) : null;
+    pushHistory(slot, prevCount);
+    slot.currentTicket = newCount;
+    slot.lastUpdated = Date.now();
+    if(window.Diag) Diag.logDiff('none','state',`slot #${slot.slotNumber} updated (preview sale)`,_diagBefore,slot);
+    logSale(slot, prevCount, newCount);
+    checkPackFinished(slot);
+  });
+  saveSlots();
+  previewBatch = {};
+  document.getElementById('previewScanModal').style.display='none';
+  renderGrid(); renderSidebar();
+  toast(`Preview sale saved — ${rows.length} pack${rows.length>1?'s':''} updated`,'ok');
+}
+
 function assignNewLotteryFromUnique(code, lotteryId, packId, ticketNum){
   // 1. Look up lottery in admin DB by first 4 digits
   const lot=db.lotteries.find(l=>l.lotteryId===lotteryId);
@@ -3778,7 +3941,7 @@ slotsData.slots.forEach(s=>{
   }
 });
 saveSlots();
-renderGrid(); renderSidebar(); updateAdPill();
+renderGrid(); renderSidebar(); updateAdPill(); updatePreviewModeBtn();
 if(window.Diag) Diag.watchOverflow('.slot-card, .slot-name-label, .flip-game-name');
 function applyExternalTheme(theme){
   document.documentElement.setAttribute('data-theme',theme);
@@ -3897,8 +4060,17 @@ const inShell = (window.parent && window.parent!==window);
 
 // Helper: bring window to front, whether standalone or in shell
 function reqBringToFront(){
-  if(window.electronAPI){ window.electronAPI.bringToFront(); }
-  else if(inShell){ window.parent.postMessage('lottery:bringToFront','*'); }
+  if(window.electronAPI){
+    if(window.Diag) Diag.log('none','ipc','reqBringToFront: calling window.electronAPI.bringToFront() directly');
+    window.electronAPI.bringToFront();
+  }
+  else if(inShell){
+    if(window.Diag) Diag.log('none','ipc','reqBringToFront: no direct electronAPI, posting lottery:bringToFront to parent shell');
+    window.parent.postMessage('lottery:bringToFront','*');
+  }
+  else {
+    if(window.Diag) Diag.log('none','error','reqBringToFront: neither electronAPI nor inShell — cannot bring window forward');
+  }
 }
 
 // Core handler for a barcode arriving from the global hook.

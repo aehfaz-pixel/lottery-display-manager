@@ -244,7 +244,7 @@ td{padding:9px 12px;vertical-align:middle}
   <button class="btn btn-sec" onclick="syncAllTlc()" title="Sync all lotteries with TLC data">🔄 Sync All TLC</button>
   <button class="btn btn-sec" onclick="compressAllImages()" title="Re-compress all stored images to save storage space">🗜 Compress Images</button>
   <div class="spacer"></div>
-  <input type="text" class="search-box" id="srch" placeholder="🔍 Search name, barcode, ID..." oninput="scheduleRenderTable()">
+  <input type="text" class="search-box" id="srch" placeholder="🔍 Search name, barcode, ID..." oninput="if(this.value.startsWith('~')){this.value=this.value.slice(1);}scheduleRenderTable()">
 </div>
 
 <div class="tbl-wrap">
@@ -274,8 +274,8 @@ td{padding:9px 12px;vertical-align:middle}
       <button class="btn btn-sec btn-sm" onclick="clearInvDates()">Clear</button>
     </div>
     <div class="spacer"></div>
-    <input type="text" class="search-box" id="invSrch" placeholder="🔍 Search name, barcode..." oninput="invCurrentPage=0;renderInventory()" style="width:200px">
-    <button class="btn btn-sec btn-sm" onclick="refreshInventoryClick()" title="Sync names/prices/pack sizes from Admin, then refresh the view">🔄 Refresh</button>
+    <input type="text" class="search-box" id="invSrch" placeholder="🔍 Search name, barcode..." oninput="if(this.value.startsWith('~')){this.value=this.value.slice(1);}invCurrentPage=0;renderInventory()" style="width:200px">
+    <button class="btn btn-sec btn-sm" onclick="renderInventory()" title="Refresh from manager">🔄 Refresh</button>
     <button class="btn btn-danger btn-sm" id="invDeleteSelBtn" style="display:none" onclick="deleteSelectedInv()">🗑 Delete Selected (<span id="invSelCount">0</span>)</button>
     <button class="btn btn-sec btn-sm" onclick="archiveOldInv()" title="Remove inventory records older than 6 months">🗄 Archive Old</button>
 
@@ -500,18 +500,10 @@ try{
   _dbSync.onmessage=(ev)=>{
     if(ev.data==='db-changed'){
       db=loadDB();
-      // Also re-warm the image cache — a lottery created in ANOTHER iframe
-      // (e.g. Inventory's background TLC lookup, see resolveNewLotteryForQueue)
-      // writes its image to IndexedDB in that iframe's context only. Without
-      // this, this frame's `db` picks up the new name/price fine (plain
-      // data, re-read from localStorage) but its `imgCache` stays stale
-      // until something else happens to re-warm it — which is why the
-      // image previously only appeared after manually running Sync All.
-      warmImgCache().then(()=>{
-        try{ renderTable(); }catch(e){}
-        try{ if(document.getElementById('tabContent-inv')?.classList.contains('active')) renderInventory(); }catch(e){}
-        try{ updateStorage(); }catch(e){}
-      });
+      // Re-render whichever view is active in this frame
+      try{ renderTable(); }catch(e){}
+      try{ if(document.getElementById('tabContent-inv')?.classList.contains('active')) renderInventory(); }catch(e){}
+      try{ updateStorage(); }catch(e){}
     }
   };
 }catch(e){}
@@ -736,7 +728,10 @@ function scheduleRenderTable(){
   },150);
 }
 function renderTable(){
-  const q=document.getElementById('srch').value.toLowerCase();
+  // Strip a leading ~ — if the search box happens to have OS keyboard
+  // focus when a scan fires, the raw keystrokes (including the scanner's
+  // ~ prefix) type into it like any other input, same as normal typing.
+  const q=document.getElementById('srch').value.replace(/^~/,'').toLowerCase();
   const head=document.getElementById('tHead'),body=document.getElementById('tBody');
   const cols=[
     {k:'image',l:'Image',w:'72px'},
@@ -1095,34 +1090,21 @@ function toast(msg,type='info'){
 }
 
 // ── TLC SYNC ─────────────────────────────────────────────
-// TLC scratch-off data (name/price/pack size/image) never changes once
-// published — so once a lottery ID has been successfully synced, it never
-// needs to be re-fetched. This replaces the old 24h-TTL approach, which
-// caused every lottery to silently re-hit TLC once a day even though
-// nothing about it could have changed.
-const totalTicketsKey='c_total_tickets_1780013226667';
-
-function isLotteryTlcDataComplete(l){
-  if(!l) return false;
-  const hasImage = !!l.image && (!l.image.startsWith('idb:') || !!imgCache[l.id]);
-  return !!l.name && !!l.price && !!(l.custom && l.custom[totalTicketsKey]) && hasImage;
-}
+const TLC_TTL=24*60*60*1000;
 
 async function syncLotteryTlc(id, gameNumber, force=false){
   try{
     const l=db.lotteries.find(x=>x.id===id);
     if(!l) return false;
-    // Skip if we already have complete data for this lottery ID — TLC data
-    // for a given game is permanent, so "already have it" is the only skip
-    // condition that matters now (age is irrelevant). `force=true` (from
-    // an explicit re-check action) always bypasses this.
-    if(!force && isLotteryTlcDataComplete(l)) return 'skipped';
+    // Skip if synced recently (unless forced)
+    if(!force && l.tlcSyncedAt && Date.now()-l.tlcSyncedAt<TLC_TTL) return 'skipped';
     const res=await fetch(`/api/tlc/scratch/${gameNumber}`);
     const data=await res.json();
     if(!data.ok){toast(`TLC: ${data.error}`,'err');return false;}
     if(data.name) l.name=data.name;
     if(data.price) l.price=data.price;
-    if(data.packSize){if(!l.custom)l.custom={};l.custom[totalTicketsKey]=data.packSize;}
+    const totalKey='c_total_tickets_1780013226667';
+    if(data.packSize){if(!l.custom)l.custom={};l.custom[totalKey]=data.packSize;}
     // Only fetch image if not already in IDB
     if(!l.image||!l.image.startsWith('idb:')||!imgCache[l.id]){
       const imgUrl=`https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/${gameNumber}_img1.gif`;
@@ -1131,7 +1113,7 @@ async function syncLotteryTlc(id, gameNumber, force=false){
         if(ir.ok){const b=await ir.json();if(b.dataUrl) await storeImg(l,b.dataUrl);}
       }catch(e){l.image=imgUrl;}
     }
-    l.tlcSyncedAt=Date.now(); // kept for display/debugging only — no longer used to decide staleness
+    l.tlcSyncedAt=Date.now();
     return true;
   }catch(e){
     toast('TLC sync failed — is server running?','err');
@@ -1142,11 +1124,9 @@ async function syncLotteryTlc(id, gameNumber, force=false){
 async function syncAllTlc() {
   const lotteries = db.lotteries.filter(l => l.lotteryId && /^\d{4}$/.test(l.lotteryId));
   if (!lotteries.length) { toast('No lotteries with valid game numbers', 'info'); return; }
-  // "Stale" now means "incomplete," not "old" — this is the gap-fill-only
-  // Refresh behavior: anything already fully synced is left alone.
-  const stale = lotteries.filter(l => !isLotteryTlcDataComplete(l));
-  if(!stale.length){ toast('All lotteries already have complete TLC data','ok'); return; }
-  toast(`Syncing ${stale.length} lotteries (${lotteries.length-stale.length} already complete)...`, 'info');
+  const stale = lotteries.filter(l => !l.tlcSyncedAt || Date.now()-l.tlcSyncedAt >= TLC_TTL);
+  if(!stale.length){ toast('All lotteries up to date (synced within 24h)','ok'); return; }
+  toast(`Syncing ${stale.length} lotteries (${lotteries.length-stale.length} up to date)...`, 'info');
   const BATCH = 8;
   let count = 0;
   for(let i=0; i<stale.length; i+=BATCH){
@@ -1228,48 +1208,11 @@ function invSortVal(item,col,mgrSlots){
   }
 }
 
-// One-way resync: overwrite every inventory item's stored snapshot
-// (name/price/totalTickets) with whatever Admin's DB currently has for
-// that lottery ID. Admin is always the source of truth here — this never
-// writes anything back to Admin. Items whose lottery ID no longer exists
-// in Admin at all are left untouched (nothing to sync from).
-function refreshInventoryFromAdmin(){
-  const inv=loadInventory();
-  if(!inv.length){ return {changed:0,total:0}; }
-  let changed=0;
-  inv.forEach(item=>{
-    const lot=db.lotteries.find(l=>l.lotteryId===item.lotteryId);
-    if(!lot) return; // nothing in Admin to sync from — leave as-is
-    const newName=lot.name||item.lotteryId;
-    const newPrice=lot.price||'';
-    const newTotal=getTotalTicketsFromLot(lot)||'';
-    if(item.name!==newName||item.price!==newPrice||item.totalTickets!==newTotal){
-      item.name=newName;item.price=newPrice;item.totalTickets=newTotal;
-      changed++;
-    }
-  });
-  if(changed>0) saveInventory(inv);
-  return {changed,total:inv.length};
-}
-
-// Repurposed Refresh button handler: (1) one-way resync every inventory
-// item's snapshot from Admin's current data, (2) then do the original
-// refresh-the-view behavior (re-pull inventory + Manager slot status).
-// Both were previously separate concepts sharing one button by coincidence
-// of naming — this combines them into one meaningful click.
-function refreshInventoryClick(){
-  const {changed,total}=refreshInventoryFromAdmin();
-  renderInventory();
-  if(total===0){ toast('No inventory records to refresh','info'); }
-  else if(changed===0){ toast('Inventory is already up to date with Admin','ok'); }
-  else{ toast(`Synced ${changed} of ${total} item${total>1?'s':''} from Admin`,'ok'); }
-}
-
 function getFilteredInv(){
   let mgrSlots=[];
   try{const r=localStorage.getItem('lotteryApp_slots');if(r)mgrSlots=JSON.parse(r).slots||[];}catch(e){}
   const inv=loadInventory();
-  const q=(document.getElementById('invSrch')?.value||'').toLowerCase();
+  const q=(document.getElementById('invSrch')?.value||'').replace(/^~/,'').toLowerCase();
   const {fromTs,toTs}=getInvDateRange();
   let result=inv.filter(item=>{
     if(!invInDateRange(item,fromTs,toTs)) return false;
@@ -1619,12 +1562,6 @@ function renderInvByDate(){
 
 // ── BULK SCAN ─────────────────────────────────────────────
 let bulkScanQueue=[];
-// Tracks in-flight background TLC lookups for NEW lottery IDs triggered from
-// Add Inventory, keyed by lotteryId → Promise. Lets multiple scans of the
-// same not-yet-known lottery ID (e.g. two packs of a brand-new game
-// scanned back to back) share one lookup instead of firing duplicate TLC
-// requests, without blocking the scan input in between.
-let pendingTlcLookups={};
 
 function openBulkScanModal(){
   bulkScanQueue=[];
@@ -1648,9 +1585,8 @@ function bulkScanValidate(){
   const res=document.getElementById('bulkScanResult');
   if(!val){res.textContent='';return;}
   if(!/^\d{14}$/.test(val)){res.style.color='var(--muted)';res.textContent=`${val.length}/14 digits`;return;}
-  // Check duplicate in current queue — same pack (lottery ID + pack ID),
-  // ignoring the ticket-number suffix (see bulkScanAdd for full rationale).
-  if(bulkScanQueue.find(i=>i.packBarcode.slice(0,11)===val.slice(0,11))){
+  // Check duplicate in current queue
+  if(bulkScanQueue.find(i=>i.packBarcode===val)){
     res.style.color='var(--warn)';res.textContent='Already scanned — will be ignored';return;
   }
   const lotteryId=val.slice(0,4);
@@ -1659,124 +1595,60 @@ function bulkScanValidate(){
   else{res.style.color='var(--warn)';res.textContent=`⚠ Lottery ID "${lotteryId}" not in database — will attempt TLC lookup`;}
 }
 
-function bulkScanAdd(){
+async function bulkScanAdd(){
   const inp=document.getElementById('bulkScanInput');
   const val=inp.value.trim().replace(/^~/,'');
   const res=document.getElementById('bulkScanResult');
   if(!/^\d{14}$/.test(val)){toast('Enter a valid 14-digit barcode','err');return;}
-  // Block duplicate — compare lottery ID + pack ID (first 11 digits) only,
-  // NOT the full 14-digit code. The last 3 digits are the ticket number,
-  // which varies scan-to-scan for the same physical pack (e.g. someone
-  // scans ticket 001 then later re-scans the same pack at 023) — comparing
-  // all 14 digits let the same pack be added twice under two "different"
-  // barcodes.
-  const packKey=val.slice(0,11);
-  if(bulkScanQueue.find(i=>i.packBarcode.slice(0,11)===packKey)){
+  // Block duplicate
+  if(bulkScanQueue.find(i=>i.packBarcode===val)){
     res.style.color='var(--warn)';res.textContent='Duplicate — ignored';
     inp.value='';setTimeout(()=>{res.textContent='';},2000);return;
   }
   const lotteryId=val.slice(0,4);
   const packId=val.slice(4,11);
-  const lot=db.lotteries.find(l=>l.lotteryId===lotteryId);
-
-  if(lot){
-    // Known lottery — add immediately, no network call, no waiting.
-    const item={
-      packBarcode:val,lotteryId,packId,
-      name:lot.name||lotteryId,
-      price:lot.price||'',
-      totalTickets:getTotalTicketsFromLot(lot)||'',
-      loadedAt:Date.now(),
-      status:'ok'
-    };
-    bulkScanQueue.push(item);
-    inp.value='';
-    res.style.color='var(--success)';res.textContent=`✓ Added: ${item.name}`;
-    renderBulkScanQueue();
-    setTimeout(()=>inp.focus(),50);
-    return;
-  }
-
-  // Unknown lottery — add a placeholder row immediately (non-blocking) so
-  // the person can keep scanning without waiting on TLC. The row fills in
-  // (or shows a retry option) once the background lookup finishes.
-  const item={
-    packBarcode:val,lotteryId,packId,
-    name:`Looking up #${lotteryId}...`,
-    price:'',
-    totalTickets:'',
-    loadedAt:Date.now(),
-    status:'pending'
-  };
-  bulkScanQueue.push(item);
-  inp.value='';
-  res.style.color='var(--muted)';res.textContent=`🔄 New lottery — looking up #${lotteryId} in background...`;
-  renderBulkScanQueue();
-  setTimeout(()=>inp.focus(),50);
-  resolveNewLotteryForQueue(lotteryId); // fire-and-forget — never awaited here
-}
-
-// Resolves a not-yet-known lottery ID via TLC in the background, then
-// updates every queued item still waiting on it. Safe to call multiple
-// times for the same lotteryId in quick succession — concurrent callers
-// share the one in-flight lookup instead of firing duplicate TLC requests.
-async function resolveNewLotteryForQueue(lotteryId){
-  if(pendingTlcLookups[lotteryId]){
-    await pendingTlcLookups[lotteryId];
-    return;
-  }
-  const lookup=(async()=>{
+  let lot=db.lotteries.find(l=>l.lotteryId===lotteryId);
+  let status='ok';
+  if(!lot){
+    // Try TLC
+    res.style.color='var(--muted)';res.textContent=`Looking up ID "${lotteryId}" on TLC...`;
     try{
       const r=await fetch(`/api/tlc/scratch/${lotteryId}`);
       const d=await r.json();
-      if(!d.ok||!d.name) return null;
-      const newLot={id:genId(),packBarcode:null,lotteryId,name:d.name,price:d.price||'',custom:{},createdAt:Date.now()};
-      if(d.packSize){const totalKey='c_total_tickets_1780013226667';newLot.custom[totalKey]=d.packSize;}
-      try{
-        const ir=await fetch(`/api/tlc/image?url=${encodeURIComponent('https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/'+lotteryId+'_img1.gif')}`);
-        const ib=await ir.json();if(ib.dataUrl) await storeImg(newLot,ib.dataUrl);
-      }catch(e){}
-      db.lotteries.push(newLot);saveDB();renderTable();
-      return newLot;
-    }catch(e){
-      return null;
+      if(d.ok&&d.name){
+        // Auto-add to DB
+        const newLot={id:genId(),packBarcode:null,lotteryId,name:d.name,price:d.price||'',custom:{},createdAt:Date.now()};
+        if(d.packSize){const totalKey='c_total_tickets_1780013226667';newLot.custom[totalKey]=d.packSize;}
+        // Try image
+        try{
+          const ir=await fetch(`/api/tlc/image?url=${encodeURIComponent('https://www.texaslottery.com/export/sites/lottery/Images/scratchoffs/'+lotteryId+'_img1.gif')}`);
+          const ib=await ir.json();if(ib.dataUrl) await storeImg(newLot,ib.dataUrl);
+        }catch(e){}
+        db.lotteries.push(newLot);saveDB();renderTable();
+        lot=newLot;
+        toast(`Auto-added: ${d.name}`,'ok');
+      } else {
+        status='unknown';
+      }
+    }catch(e){status='unknown';}
+    if(status==='unknown'){
+      res.style.color='var(--danger)';res.textContent=`Could not find ID "${lotteryId}" on TLC — fetch failed or game not found.`;
+      return;
     }
-  })();
-  pendingTlcLookups[lotteryId]=lookup;
-  const resolvedLot=await lookup;
-  delete pendingTlcLookups[lotteryId];
-
-  // Update every queue row still waiting on this lottery ID — there may be
-  // more than one if multiple packs of the same new game were scanned
-  // while the lookup was in flight.
-  const waiting=bulkScanQueue.filter(i=>i.lotteryId===lotteryId&&i.status==='pending');
-  if(!waiting.length) return; // all removed from queue before lookup finished
-  if(resolvedLot){
-    waiting.forEach(item=>{
-      item.name=resolvedLot.name||lotteryId;
-      item.price=resolvedLot.price||'';
-      item.totalTickets=getTotalTicketsFromLot(resolvedLot)||'';
-      item.status='ok';
-    });
-    toast(`Auto-added: ${resolvedLot.name}`,'ok');
-  } else {
-    waiting.forEach(item=>{
-      item.name=`#${lotteryId} — lookup failed`;
-      item.status='error';
-    });
   }
+  const item={
+    packBarcode:val,lotteryId,packId,
+    name:lot.name||lotteryId,
+    price:lot.price||'',
+    totalTickets:getTotalTicketsFromLot(lot)||'',
+    loadedAt:Date.now(),
+    status
+  };
+  bulkScanQueue.push(item);
+  inp.value='';
+  res.style.color='var(--success)';res.textContent=`✓ Added: ${item.name}`;
   renderBulkScanQueue();
-}
-
-// Retry button for a row stuck in 'error' state — re-runs the same
-// background lookup without disturbing anything else in the queue.
-function bulkScanRetryLookup(lotteryId){
-  bulkScanQueue.filter(i=>i.lotteryId===lotteryId&&i.status==='error').forEach(item=>{
-    item.name=`Looking up #${lotteryId}...`;
-    item.status='pending';
-  });
-  renderBulkScanQueue();
-  resolveNewLotteryForQueue(lotteryId);
+  setTimeout(()=>inp.focus(),50);
 }
 
 function getTotalTicketsFromLot(lot){
@@ -1792,26 +1664,17 @@ function renderBulkScanQueue(){
   if(!bulkScanQueue.length){q.style.display='none';count.textContent='';loadBtn.style.display='none';return;}
   q.style.display='block';
   loadBtn.style.display='inline-block';
-  const pendingCount=bulkScanQueue.filter(i=>i.status==='pending').length;
-  count.textContent=`${bulkScanQueue.length} pack${bulkScanQueue.length>1?'s':''} queued`+(pendingCount?` (${pendingCount} still looking up)`:'');
+  count.textContent=`${bulkScanQueue.length} pack${bulkScanQueue.length>1?'s':''} queued`;
   q.innerHTML=bulkScanQueue.map((item,i)=>{
     const lot=db.lotteries.find(l=>l.lotteryId===item.lotteryId);
     const img=resolveImg(lot?.image)?`<img class="sq-img" src="${resolveImg(lot.image)}" alt="">`:`<div class="sq-no-img">🎫</div>`;
-    let statusHtml;
-    if(item.status==='pending'){
-      statusHtml=`<span class="sq-status" style="background:var(--btn-sec-bg);color:var(--muted)">🔄 Looking up...</span>`;
-    } else if(item.status==='error'){
-      statusHtml=`<span class="sq-status" style="background:#fee2e2;color:var(--danger);cursor:pointer" onclick="bulkScanRetryLookup('${item.lotteryId}')" title="Click to retry">⚠ Failed — Retry</span>`;
-    } else {
-      statusHtml=`<span class="sq-status ok">✓ Ready</span>`;
-    }
     return `<div class="scan-queue-item">
       ${img}
       <div class="sq-info">
         <div class="sq-name">${escH(item.name)}</div>
         <div class="sq-meta">${escH(item.packBarcode)} · ${escH(item.lotteryId)} · ${escH(item.price||'—')}</div>
       </div>
-      ${statusHtml}
+      <span class="sq-status ok">✓ Ready</span>
       <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px" onclick="bulkScanRemove(${i})">✕</button>
     </div>`;
   }).join('');
@@ -1824,12 +1687,9 @@ function bulkScanRemove(i){
 
 function bulkScanLoad(){
   if(!bulkScanQueue.length){toast('Nothing to load','warn');return;}
-  const ready=bulkScanQueue.filter(i=>i.status==='ok');
-  const notReady=bulkScanQueue.length-ready.length;
-  if(!ready.length){toast('Nothing ready to load yet — still looking up '+notReady+' item(s)','warn');return;}
   const inv=loadInventory();
   let added=0;
-  ready.forEach(item=>{
+  bulkScanQueue.forEach(item=>{
     if(!inv.find(i=>i.packBarcode===item.packBarcode)){
       // Normalize loadedAt to noon of that day for consistent date grouping
     const _d=new Date(item.loadedAt);
@@ -1838,14 +1698,23 @@ function bulkScanLoad(){
     }
   });
   saveInventory(inv);
-  // Remove only the items that were actually loaded — leave pending/error
-  // rows in the queue so they're not silently lost, and the person can
-  // load them separately once resolved.
-  bulkScanQueue=bulkScanQueue.filter(i=>i.status!=='ok');
-  if(!bulkScanQueue.length) closeBulkScanModal();
-  else renderBulkScanQueue();
+  closeBulkScanModal();
   renderInventory();
-  toast(`${added} pack${added>1?'s':''} added to inventory`+(notReady?` — ${notReady} still pending, left in queue`:''),'ok');
+  toast(`${added} pack${added>1?'s':''} added to inventory`,'ok');
+}
+
+// Called by the shell's routeBarcode() to decide whether Preview Scan Mode
+// should force this scan to Manager instead of Admin. Defined here (rather
+// than the shell reaching into this iframe's DOM directly) so Admin owns
+// the definition of its own "busy" state — more reliable than cross-frame
+// document.activeElement checks, and the natural place to extend if new
+// scan-consuming inputs/modals are added to Admin later.
+function isBusyWithOwnScan(){
+  const tag = document.activeElement && document.activeElement.tagName;
+  if(tag && ['INPUT','TEXTAREA','SELECT'].includes(tag)) return true;
+  const modal = document.getElementById('bulkScanModal');
+  if(modal && modal.style.display!=='none') return true;
+  return false;
 }
 
 // Route scanner to bulk scan modal when open
@@ -2088,66 +1957,6 @@ window.addEventListener('storage',e=>{
 renderTable();updateStorage();
 warmImgCache().then(()=>migrateImagesToIdb()).then(()=>{renderTable();updateStorage();});
 migrateImgUrls();
-
-// ── SEED DATA (pre-loaded ticket library) ─────────────────
-// Ships ~72 known lotteries (name/price/pack size/image) bundled with the
-// app so a fresh install isn't blank on day one. Runs at most once ever,
-// and only if the DB is genuinely empty — a device where the user has
-// manually deleted everything is NOT re-seeded, since the flag (not the
-// current lottery count) is what's checked.
-const SEED_LOADED_KEY='lotteryApp_seedLoaded';
-async function loadSeedDataIfNeeded(){
-  // Only seed from the Admin (#tab=db) iframe instance when hosted in the
-  // shell — otherwise both the Admin AND Inventory iframe instances of
-  // this same file would race to seed simultaneously on a truly fresh
-  // install, producing duplicate lottery entries.
-  const inShell=(window.parent&&window.parent!==window);
-  if(inShell){
-    const hash=(location.hash||'').replace('#','');
-    const tab=new URLSearchParams(hash).get('tab')||'db';
-    if(tab!=='db') return;
-  }
-  if(localStorage.getItem(SEED_LOADED_KEY)==='1') return;
-  if(db.lotteries.length>0){
-    // Not a fresh install (has data from some other source, e.g. a
-    // restored backup) — don't seed on top of it, but do mark seeding as
-    // "handled" so we never revisit this check again on this device.
-    localStorage.setItem(SEED_LOADED_KEY,'1');
-    return;
-  }
-  try{
-    const res=await fetch('tlc-seed-data.json');
-    if(!res.ok) throw new Error('seed file not found');
-    const seed=await res.json();
-    if(!seed.lotteries||!seed.lotteries.length) throw new Error('seed file empty');
-    const totalTicketsKey='c_total_tickets_1780013226667';
-    for(const entry of seed.lotteries){
-      const newLot={
-        id:genId(),
-        lotteryId:entry.lotteryId,
-        name:entry.name||'',
-        price:entry.price||'',
-        packBarcode:null,
-        custom: entry.packSize ? {[totalTicketsKey]:entry.packSize} : {},
-        createdAt:Date.now(),
-      };
-      if(entry.image){
-        try{ await storeImg(newLot, entry.image); }catch(e){ /* image optional — keep going without it */ }
-      }
-      db.lotteries.push(newLot);
-    }
-    saveDB();
-    localStorage.setItem(SEED_LOADED_KEY,'1');
-    renderTable();
-    console.log(`[seed] Loaded ${seed.lotteries.length} pre-installed lotteries`);
-  }catch(e){
-    console.warn('[seed] Failed to load seed data (non-fatal):',e.message);
-    // Deliberately do NOT set SEED_LOADED_KEY here — leave it so seeding
-    // can be retried on next launch (e.g. if the seed file failed to load
-    // due to a transient server-startup timing issue).
-  }
-}
-loadSeedDataIfNeeded();
 
 async function migrateImgUrls(){
   // Only run once ever — version '2' means img1.gif migration done

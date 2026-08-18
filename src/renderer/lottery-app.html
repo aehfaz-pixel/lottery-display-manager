@@ -78,10 +78,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ar
     <button class="shell-tab" data-tab="diagnostics" onclick="switchShellTab('diagnostics')">🩺 Diagnostics</button>
     <div class="spacer"></div>
     <button id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
-    <span id="versionTag" style="font-size:10px;color:var(--muted);font-family:monospace;opacity:0.6;white-space:nowrap">v1.0.37</span>
+    <span id="versionTag" style="font-size:11px;color:var(--text);font-family:monospace;opacity:0.85;font-weight:600;white-space:nowrap">v1.0.34</span>
     <button class="shell-tab" style="border-bottom:none;background:var(--primary);color:#fff;border-radius:7px;height:32px;padding:0 14px" onclick="openDisplayWindow()">📺 Open Display</button>
     <button id="topInspectBtn" class="shell-tab" style="border-bottom:none;background:var(--surface);border:1px solid var(--border);border-radius:7px;height:32px;padding:0 12px" onclick="toggleInspectBtnTop()" title="Toggle click-to-inspect layout tool (works in every window)">🔍 Inspect</button>
-    <button id="topFlagBtn" class="shell-tab" style="border-bottom:none;background:var(--surface);border:1px solid var(--border);border-radius:7px;height:32px;padding:0 12px" onclick="flagThisTop()" title="Export a diagnostic report (recent events, version, timestamp) as a file">🚩 Flag This</button>
     <div class="scan-pill" id="shellScanPill"><span class="dot"></span><span id="shellScanText">Scanning active</span></div>
   </div>
   <div id="updateBar">
@@ -228,17 +227,36 @@ function switchShellTab(tab){
 // Route per the active tab:
 //   - admin or inventory tab  → admin's handleBarcode (option A: add/find lottery)
 //   - anywhere else (manager) → manager's globalBarcode
+const PREVIEW_MODE_KEY='lotteryApp_previewScanMode'; // shared with lottery-manager.html
+function previewModeActive(){
+  return localStorage.getItem(PREVIEW_MODE_KEY)==='1';
+}
+// While Preview Scan Mode is on, scans should reach Manager even when
+// Admin/Inventory is the active tab — UNLESS the person is actively using
+// that tab for its own scan-driven purpose (a text input focused there, or
+// Admin's Bulk Scan / Add Inventory modal open), in which case that takes
+// priority and behaves exactly as it did before Preview Mode existed.
+function admBusyWithOwnScan(adm){
+  try{
+    if(adm && typeof adm.isBusyWithOwnScan==='function') return adm.isBusyWithOwnScan();
+  }catch(e){ /* cross-frame access issue — fail safe, don't force */ return true; }
+  return true; // unknown state — fail safe, don't force Manager
+}
 function routeBarcode(code,forceManager){
   code=String(code||'').trim();
   const actionId = window.Diag ? Diag.newAction('scan received: '+code, 'scan') : null;
   const mgr=document.getElementById('frame-manager').contentWindow;
   const adm=document.getElementById('frame-admin').contentWindow;
 
+  const previewForce = !forceManager && previewModeActive() && (activeTab==='admin'||activeTab==='inventory') && !admBusyWithOwnScan(adm);
+
   // If the app window itself doesn't have OS focus (forceManager=true, set
   // by main.js), always go to Manager — regardless of which tab happens to
   // be selected. Only when the app genuinely has focus does the normal
-  // tab-based routing apply.
-  if(!forceManager && (activeTab==='admin'||activeTab==='inventory')){
+  // tab-based routing apply. Preview Scan Mode (previewForce) adds a second,
+  // independent reason to force Manager even with real OS focus, unless
+  // Admin/Inventory is actively being used for its own scan purpose.
+  if(!forceManager && !previewForce && (activeTab==='admin'||activeTab==='inventory')){
     // Option A — admin handles the scan in its own way
     if(window.Diag) Diag.log(actionId,'route',`routed to Admin/Inventory (tab-based, active tab=${activeTab})`);
     try{
@@ -247,8 +265,18 @@ function routeBarcode(code,forceManager){
       if(window.Diag) Diag.log(actionId,'error','routeBarcode → admin.handleBarcode threw: '+(e&&e.message));
     }
   }
+  // Preview Scan Mode: switch the shell's visible tab to Manager too, not
+  // just ensure OS-level window focus. The two are different — if the app
+  // already has real OS focus (very common: switching between Admin/
+  // Inventory TABS inside the same window), bringToFront()'s focus() call
+  // is a correct no-op, but the person is still visually looking at
+  // Admin/Inventory. This is the actual fix for that case.
+  if(previewForce && activeTab!=='manager'){
+    if(window.Diag) Diag.log(actionId,'route','Preview Scan Mode: switching visible shell tab to manager');
+    switchShellTab('manager');
+  }
   // Default — manager handles it
-  if(window.Diag) Diag.log(actionId,'route',forceManager?'routed to Manager (forced — app lacks OS focus)':`routed to Manager (default, active tab=${activeTab})`);
+  if(window.Diag) Diag.log(actionId,'route',forceManager?'routed to Manager (forced — app lacks OS focus)':(previewForce?`routed to Manager (forced — Preview Scan Mode, active tab=${activeTab})`:`routed to Manager (default, active tab=${activeTab})`));
   try{
     if(mgr && mgr.handleHookBarcode){ mgr.handleHookBarcode(code); return; }
     if(mgr && mgr.globalBarcode){ mgr.globalBarcode(code); return; }
@@ -278,14 +306,6 @@ window.addEventListener('storage', e=>{
   if(e.key==='__diagInspectMode') updateInspectBtnTop();
 });
 updateInspectBtnTop();
-
-// ── FLAG THIS (top bar) ─────────────────────────────────────
-// Downloads a JSON diagnostic report (recent event timeline, version, tab,
-// timestamp) so a report can be handed off without opening DevTools or the
-// Diagnostics tab. See diagnostics.js Diag.exportReport().
-function flagThisTop(){
-  if(window.Diag) Diag.exportReport();
-}
 
 function installUpdateNow(){
   if(window.electronAPI && window.electronAPI.installUpdate){
@@ -335,8 +355,9 @@ if(window.electronAPI){
 
 // Let the manager frame request bringing the window to front (wrong-scan alert)
 window.addEventListener('message',ev=>{
-  if(ev.data==='lottery:bringToFront' && window.electronAPI){
-    window.electronAPI.bringToFront();
+  if(ev.data==='lottery:bringToFront'){
+    if(window.Diag) Diag.log('none','ipc',`shell received lottery:bringToFront postMessage, window.electronAPI present=${!!window.electronAPI}`);
+    if(window.electronAPI){ window.electronAPI.bringToFront(); }
   } else if(ev.data && ev.data.type==='lottery:switchTab'){
     switchShellTab(ev.data.tab);
   }

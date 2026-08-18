@@ -377,15 +377,12 @@ ipcMain.on('open-backup-folder', () => {
 });
 
 ipcMain.on('app-restart-for-import', () => {
-  debugLog('RESTART: app-restart-for-import received, flushing storage');
   const doRestart = () => {
-    debugLog('RESTART: calling app.relaunch() + app.exit(0) now');
     app.relaunch();
     app.exit(0);
   };
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.session.flushStorageData();
-    debugLog('RESTART: flushStorageData() called (fire-and-forget, non-blocking), waiting 2s before relaunch');
     setTimeout(doRestart, 2000);
   } else {
     doRestart();
@@ -393,11 +390,25 @@ ipcMain.on('app-restart-for-import', () => {
 });
 
 ipcMain.on('bring-to-front', () => {
+  debugLog('BRING-TO-FRONT: IPC received in main.js');
   if (mainWindow && !mainWindow.isDestroyed()) {
+    debugLog(`BRING-TO-FRONT: mainWindow exists, isMinimized=${mainWindow.isMinimized()}, isFocused=${mainWindow.isFocused()}, isVisible=${mainWindow.isVisible()}`);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
+    // Windows blocks background processes from stealing OS-level foreground
+    // focus from whatever app the user is actively using (anti-annoyance
+    // protection) — plain .focus() alone frequently fails against this when
+    // a genuinely different application has focus. Briefly toggling
+    // always-on-top forces a window z-order change that reliably bypasses
+    // this restriction. The toggle-off happens immediately, so the window
+    // never actually stays "stuck" always-on-top.
+    mainWindow.setAlwaysOnTop(true);
     mainWindow.focus();
+    mainWindow.setAlwaysOnTop(false);
     mainWindow.flashFrame(true);
+    debugLog('BRING-TO-FRONT: show()/setAlwaysOnTop-toggle/focus()/flashFrame() called');
+  } else {
+    debugLog('BRING-TO-FRONT: mainWindow missing or destroyed — cannot bring to front');
   }
 });
 
