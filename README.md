@@ -51,6 +51,16 @@ This app is designed around **two physical scanners with different jobs**:
 
 **Bluetooth scanners (e.g. a phone acting as a scanner):** occasional dropped/missed scans are a known symptom of Bluetooth latency, not a bug — the app requires keystrokes to arrive in a tight burst (under 50ms apart) to be recognized as a scan at all, and a Bluetooth hiccup mid-scan will make it get silently ignored. If this happens often, check the connection or consider a wired scanner.
 
+## Preview Scan Mode (added, unreleased)
+
+A second scan mode in Manager, toggled with the "🔍 Preview Scan" button in the header. Off by default.
+
+- **Off (default):** scanning updates the ticket count instantly, same as always.
+- **On:** scans are batched into a review window instead — scan several packs (from Manager, Inventory, or Admin, it doesn't matter which tab you're on), review the list, adjust quantities if needed, then **Save** to apply everything at once, or **Cancel** to discard the whole batch and change nothing.
+- Quantity shown is the number of tickets sold (e.g. currently on ticket #5, scan #10 → 6 tickets), not the number of times you scanned.
+- Every scan brings the Manager window to the front automatically, even if you were on a different tab or a completely different application.
+- The toggle can't be switched off while a review window is open with unsaved scans — save or cancel first.
+
 ## Diagnostics (added v1.0.34)
 
 A built-in troubleshooting toolkit, meant to replace most manual DevTools digging for common problems (routing issues, silent errors, layout/sizing bugs).

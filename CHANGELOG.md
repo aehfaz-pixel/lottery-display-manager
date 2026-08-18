@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Added: Preview Scan Mode — a toggleable second scan mode in Manager. When ON, scans batch into a review-before-save summary (image, name, composite ID, editable quantity, $ total) instead of applying instantly; Cancel discards the whole batch, Save applies it in one combined update. Quantity reflects the ticket range sold (e.g. currently on #5, scan #10 → 6 tickets), not the number of physical scans. See `PROJECT_STATUS.md` §13 for full details.
+- Fixed: a scan landing in a focused search box (Admin or Inventory) left a stray `~` in the search term — now stripped automatically.
+- Improved: bringing Manager to the foreground during a scan now reliably works both for switching between tabs inside the app and for a genuinely different application having focus (previously inconsistent due to a Windows OS focus-stealing restriction).
+
 ## v1.0.37 — 2026-08-18
 - Fixed: `fix-release.js` could match and rename/upload the wrong (stale, older-version) build if one was left over in `dist/` from a local test build — now matches strictly on the current version number and refuses to guess if no exact match is found. (This caused the bad v1.0.36 release below.)
 - Added: TLC data now caches permanently once fetched instead of re-checking every 24 hours (scratch-off data never changes once published) — see `PROJECT_STATUS.md` §12a

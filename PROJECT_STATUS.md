@@ -669,7 +669,47 @@ A large, multi-part session covering real reported bugs, a genuine architectural
 
 ---
 
-## 13. Future ideas — brainstormed, not started (read before assuming these exist)
+## 13. Preview Scan Mode — v1.0.37/unreleased (2026-08-18)
+
+A toggleable second scan mode in Manager. Off by default; persists on/off across restarts via `localStorage`.
+
+**Mode 1 (existing, unchanged):** any `~` scan matching an active slot instantly advances that slot's current ticket.
+
+**Mode 2 (new — Preview Scan Mode):** when ON, scans matching an active slot are batched into a review-before-save modal instead of applying instantly — a combined "ring up a sale, then commit it" flow. Scans that don't match any active slot are completely unaffected by the toggle and always go through the existing new-pack-assignment flow.
+
+### Behavior
+- **Per scan:** Manager is brought forward (both the shell's visible tab AND, if needed, real OS-level window focus — see below), the pack is validated against the sold-out/exceeds-pack-size check (shared, unchanged from Mode 1), then added to (or updates) a batch row.
+- **Quantity = ticket RANGE, not scan count.** A slot on ticket 5, scanning ticket 10, means 6 tickets sold (5 through 10), not "1 scan." Two separate scans of the same pack (e.g. 5, then later 9) still yield qty 5 — quantity always reflects `highestTicketSeen − startTicket + 1`.
+- **Manual `-`/`+` edits** directly set quantity; Save always uses `startTicket + qty` as the new current ticket, never recalculating from the last-scanned ticket number, so a manual correction is exactly respected.
+- **Modal** (blocks/covers the grid while open): one row per distinct composite ID (image, name, composite ID, qty, $ amount, remove), a total row (ticket count + $ total), Cancel and Save.
+- **Cancel:** discards the batch entirely, nothing changes.
+- **Save:** applies every row in one combined update (same `pushHistory`/`logSale`/`checkPackFinished` pipeline as Mode 1, just batched), closes the modal, clears the batch.
+- **Toggle is locked while the modal has an unsaved batch** — must Save or Cancel first.
+
+### Routing — the non-obvious part
+Manager's own scan pipeline (`globalBarcode()`) only ever runs when the shell routes a scan to Manager in the first place. `lottery-app.html`'s `routeBarcode()` normally sends scans to Admin's `handleBarcode()` whenever Admin or Inventory is the active tab (with real OS focus) — this is correct, existing, and unrelated to Preview Mode. **Preview Mode needed its own routing override** to actually catch scans "from anywhere," added as `previewForce`: forces routing to Manager when Preview Mode is ON and Admin/Inventory is active, **unless** Admin has a text input focused or its Bulk Scan/Add Inventory modal is open — in which case Admin's own normal handling takes priority untouched. Admin exposes its own `isBusyWithOwnScan()` (checked from the shell) rather than the shell reaching into Admin's DOM directly — more reliable across the iframe boundary, and keeps Admin the source of truth for its own busy-state.
+
+Also fixed as part of this: Admin's and Inventory's search boxes now strip a leading `~` from both the visible input value and the internal search query — previously a scan landing in a focused search box (which happens via completely normal OS keyboard routing, independent of anything in this app) left a stray `~` polluting the search term.
+
+### "Bring to foreground" — two genuinely different things, both needed
+Real-world testing (via the Diagnostics tab's new `ipc` category logging) revealed this needed two separate fixes, not one:
+
+1. **Switching the shell's visible TAB to Manager.** This is the common case — you're on Admin/Inventory tab, but the whole app window already has real OS focus (`mainWindow.isFocused()` was `true` in the actual test logs). `mainWindow.focus()` correctly no-ops here since focus never left the app — but the person is still looking at Admin/Inventory's DOM. Fix: `routeBarcode()` now calls `switchShellTab('manager')` whenever `previewForce` applies and Manager isn't already the active tab.
+2. **True OS-level foreground bring**, for when a genuinely different application has focus. `main.js`'s `bring-to-front` IPC handler already called `mainWindow.show()/focus()/flashFrame(true)`, and testing confirmed this chain fires correctly — but plain `.focus()` alone is well-known to be unreliable against Windows' foreground-lock protection (background processes are deliberately blocked from stealing focus from whatever the user is actively using). Fix: briefly toggle `setAlwaysOnTop(true)` then back to `false` around the `.focus()` call — a standard, low-risk workaround that forces a window z-order change, reliably bypassing the restriction. Confirmed working via real-world test with a genuinely different application focused.
+
+Diagnostics logging (`ipc` category) was added at every link in this chain (`reqBringToFront()` in Manager, the shell's `postMessage` listener, `main.js`'s IPC handler via the file-based debug log) — this is what made root-causing both issues possible instead of guessing. Kept in place for future troubleshooting.
+
+### Testing notes
+- Verified: range-based quantity math (single multi-ticket scan and repeated scans of the same pack), multi-pack batching, manual qty edit, Cancel (no changes), Save (correct `slot.currentTicket` per row), sold-out/exceeds-pack-size correctly blocks before ever reaching the batch (shared check, unchanged), search-bar exclusion, Bulk Scan modal exclusion, in-app tab-switch foreground, true cross-application OS-level foreground, and a 3-point regression pass (Preview OFF still behaves exactly as original Mode 1; Admin's own search and Bulk Scan workflows unaffected).
+- Manual keyboard typing cannot validate the true-cross-application case on its own — when a different OS app genuinely has keyboard focus, typed keystrokes go to that app, not Electron's local fallback listener. Only the real OS-level global hook (`uiohook-napi`) or a relayed/physical scanner reaches the app without focus. This was a live source of confusion during testing before being identified — worth remembering for any future background-scan testing.
+
+**Files touched:** `lottery-manager.html` (toggle, batch logic, modal UI, `reqBringToFront` logging), `lottery-app.html` (`previewModeActive()`, `admBusyWithOwnScan()`, `previewForce` routing override, tab-switch, shell-side logging), `lottery-admin.html` (`isBusyWithOwnScan()`, search tilde-stripping ×2), `main.js` (`bring-to-front` handler: `setAlwaysOnTop` toggle + logging).
+
+**Not yet released** — committed to `main` but not yet bundled into a numbered `npm run release`.
+
+---
+
+## 14. Future ideas — brainstormed, not started (read before assuming these exist)
 
 These are **design-only discussions**, not implemented, not scoped, no code written. Logged here purely so a future chat doesn't lose the context or accidentally re-derive the same reasoning from scratch. Do not treat anything in this section as "in progress" — nothing here has been started.
 
