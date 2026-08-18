@@ -669,7 +669,7 @@ A large, multi-part session covering real reported bugs, a genuine architectural
 
 ---
 
-## 13. Preview Scan Mode — v1.0.37/unreleased (2026-08-18)
+## 13. Preview Scan Mode — v1.0.38 (2026-08-18)
 
 A toggleable second scan mode in Manager. Off by default; persists on/off across restarts via `localStorage`.
 
@@ -705,7 +705,7 @@ Diagnostics logging (`ipc` category) was added at every link in this chain (`req
 
 **Files touched:** `lottery-manager.html` (toggle, batch logic, modal UI, `reqBringToFront` logging), `lottery-app.html` (`previewModeActive()`, `admBusyWithOwnScan()`, `previewForce` routing override, tab-switch, shell-side logging), `lottery-admin.html` (`isBusyWithOwnScan()`, search tilde-stripping ×2), `main.js` (`bring-to-front` handler: `setAlwaysOnTop` toggle + logging).
 
-**Not yet released** — committed to `main` but not yet bundled into a numbered `npm run release`.
+**Released in v1.0.38** (2026-08-18).
 
 ---
 

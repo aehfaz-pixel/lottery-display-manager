@@ -5,7 +5,7 @@
 ## What this is
 Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Node/Express backend + 7 HTML renderer files loaded as same-origin iframes sharing `localStorage`. Global OS-level keyboard hook (`uiohook-napi`) for barcode scanning. Auto-updates via GitHub Releases (`aehfaz-pixel/lottery-display-manager`, public repo).
 
-**Current version:** v1.0.37 released and live. Preview Scan Mode (§13) committed to `main` on top of that but **not yet bundled into a numbered release** — check `git log`/`package.json` version if this matters for your task.
+**Current version:** v1.0.38 — fully working, verified end-to-end. Includes Preview Scan Mode (§13).
 
 ## Before making any change
 1. Read `PROJECT_STATUS.md` in full — it has architecture, file map, full bug history, the Diagnostics system (§11), the TLC/storage/release-pipeline overhaul (§12), Preview Scan Mode (§13 — read this before touching Manager's scan pipeline, `routeBarcode()`, or the bring-to-front chain), and pure future-ideas brainstorm (§14).
@@ -28,7 +28,7 @@ Electron desktop app for managing scratch lottery tickets at Big D Foodmart. Nod
 - A large TLC/Admin/Inventory reliability overhaul, a storage-bloat fix, and a critical `fix-release.js` release-pipeline bug (which shipped a stale build under a wrong version tag in a real incident — caught and cleaned up before it reached any real user) — all in v1.0.37. Full write-up in PROJECT_STATUS.md §12 (12a–12i). If working on Admin, Inventory, Manager, Display, Home, or the release pipeline, read §12 first.
 - Backup import restart mechanism confirmed fully working on the real installed v1.0.37 app (§12h) — an earlier "faltered" report was traced to an older, since-superseded install.
 
-## Recently added — committed, not yet released
+## Recently added (v1.0.38)
 - **Preview Scan Mode** (§13): a toggleable second scan mode in Manager — batch scans into a review-before-save summary instead of applying instantly. Involved a non-obvious two-part "bring to foreground" fix (shell tab-switch vs. true OS-level focus, via a `setAlwaysOnTop` toggle to bypass Windows' foreground-lock) and a routing override in `lottery-app.html`'s `routeBarcode()` so scans reach Manager even when Admin/Inventory is the active tab. Read §13 in full before touching Manager's scan pipeline, `routeBarcode()`, or the bring-to-front chain in `main.js`.
 
 ## File map (what to open for what)

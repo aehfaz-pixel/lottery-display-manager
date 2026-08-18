@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.38 — 2026-08-18
 - Added: Preview Scan Mode — a toggleable second scan mode in Manager. When ON, scans batch into a review-before-save summary (image, name, composite ID, editable quantity, $ total) instead of applying instantly; Cancel discards the whole batch, Save applies it in one combined update. Quantity reflects the ticket range sold (e.g. currently on #5, scan #10 → 6 tickets), not the number of physical scans. See `PROJECT_STATUS.md` §13 for full details.
 - Fixed: a scan landing in a focused search box (Admin or Inventory) left a stray `~` in the search term — now stripped automatically.
 - Improved: bringing Manager to the foreground during a scan now reliably works both for switching between tabs inside the app and for a genuinely different application having focus (previously inconsistent due to a Windows OS focus-stealing restriction).
